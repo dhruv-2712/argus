@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+*.sqlite3
+.venv/
+node_modules/
+dist/
+.omc/
+reports/output/*.pdf
+reports/galwan_2020_demo.pdf
+.DS_Store
+*.egg-info/
+.pytest_cache/
+htmlcov/

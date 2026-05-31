@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python -c \"from core.models import AOI, Contact, FusedContact, IntelReport; print\\('models OK'\\)\")",
+      "Bash(python -c \"from core.fusion.engine import FusionEngine; print\\('fusion OK'\\)\")",
+      "Bash(python -c \"from layers.base import BaseLayer; print\\('base OK'\\)\")",
+      "Bash(python -c \"from db.database import Base, init_db; print\\('db OK'\\)\")",
+      "Bash(timeout 8 uvicorn api.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(kill %1)",
+      "Bash(python -m uvicorn api.main:app --host 127.0.0.1 --port 8001)",
+      "Bash(curl -s http://127.0.0.1:8001/health)",
+      "Bash(python *)",
+      "Bash(npm create *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)"
+    ]
+  }
+}
