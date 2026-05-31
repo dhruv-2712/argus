@@ -1,4 +1,4 @@
-# ARGUS
+# ARGUS — The Unblinking Eye
 
 **Multi-source geospatial intelligence fusion platform**
 
