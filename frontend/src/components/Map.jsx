@@ -35,8 +35,8 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
           { id: "labels", type: "raster", source: "esri-labels", paint: { "raster-opacity": 0.7 } },
         ],
       },
-      center: [77, 34],
-      zoom: 5,
+      center: [80.2, 34.5],
+      zoom: 8,
     })
     map.addControl(new maplibregl.NavigationControl(), "top-left")
     mapInstance.current = map
