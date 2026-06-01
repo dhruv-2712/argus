@@ -201,14 +201,35 @@ ARGUS uses exclusively open-source, publicly available data. No classified data 
 
 ---
 
+## Testing
+
+The fusion engine — the core of ARGUS — is covered by a pytest suite that
+locks in the corroboration contract (single-source penalty, multi-source
+boost + cap, contradiction suppression, reliability weighting, score
+explainability):
+
+```bash
+pip install -r requirements.txt
+pytest -q
+```
+
+## War-Room UX
+
+- **Cold-boot sequence** — cinematic POST log on launch (skippable)
+- **Live feed (WebSocket)** — contacts stream in the instant a scan resolves; audio cue on CRITICAL
+- **Command palette** — `⌘K` / `Ctrl-K` to jump to any AOI, run a scan, or toggle audio
+- **Time machine** — scrub/replay how each AOI's tracks evolved across scans
+- **Confidence explainability** — every contact shows the exact fusion math ("why this score")
+- **SPECTER overlay** — engagement ring + avenues of approach drawn around simulated contacts
+- **Low-zoom clustering** — theaters collapse into count badges when zoomed out
+- 10 hotspot AOIs pre-seeded on first launch (Galwan, Kashmir LoC, Taiwan Strait, Donbas, Hormuz…)
+
 ## Roadmap
 
-- WebSocket live contact streaming
 - Automated revisit scheduling (APScheduler)
 - GeoJSON / KML export
-- Historical timeline playback in the UI
 - True SLC coherence SAR via ASF Vertex
-- Alerting on CRITICAL detections
+- Per-user AOI workspaces
 
 ---
 
