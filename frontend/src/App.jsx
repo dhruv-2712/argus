@@ -94,7 +94,7 @@ function ArgusApp() {
       {/* Live-feed flash banner */}
       {lastEvent && Date.now() - lastEvent.at < 6000 && (
         <AlertStrip kind={lastEvent.has_critical ? "error" : "ok"} icon={<Radio size={13} />}>
-          LIVE — {lastEvent.aoi_name?.toUpperCase()}: {lastEvent.fused_count} CONTACT(S), MAX THREAT {String(lastEvent.max_threat).toUpperCase()}
+          {lastEvent.type === "auto_scan_complete" ? "AUTO" : "LIVE"} — {lastEvent.aoi_name?.toUpperCase()}: {lastEvent.fused_count} CONTACT(S), MAX THREAT {String(lastEvent.max_threat).toUpperCase()}
         </AlertStrip>
       )}
 

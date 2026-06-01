@@ -1,17 +1,20 @@
 """FastAPI application entry point for ARGUS."""
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncIterator
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
 from api.routes import aoi, contacts, intel, monitor, reports, ws
-from db.database import AOIRow, async_session, init_db
+from core.models import AOI
+from db.database import AOIRow, FusedContactRow, async_session, init_db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,13 +58,88 @@ async def _seed_demo_aoi() -> None:
         logger.info("Seeded %d demo AOIs", len(_SEED_AOIS))
 
 
+_scheduler = AsyncIOScheduler(timezone="UTC")
+
+
+async def _autonomous_scan() -> None:
+    """Hourly watchdog: scan every active AOI that is overdue per revisit_hours."""
+    from api.routes.ws import broadcast
+    from api.scanner import ScanOrchestrator
+
+    async with async_session() as session:
+        result = await session.execute(select(AOIRow).where(AOIRow.active == True))
+        rows = list(result.scalars().all())
+
+    if not rows:
+        return
+
+    now = datetime.now(timezone.utc)
+    overdue: list[AOIRow] = []
+
+    for row in rows:
+        async with async_session() as session:
+            last_ts = await session.scalar(
+                select(func.max(FusedContactRow.timestamp))
+                .where(FusedContactRow.aoi_id == row.id)
+            )
+        if last_ts is None:
+            overdue.append(row)
+            continue
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        if (now - last_ts).total_seconds() / 3600 >= row.revisit_hours:
+            overdue.append(row)
+
+    if not overdue:
+        logger.debug("Auto-scan: all AOIs within revisit window")
+        return
+
+    logger.info("Auto-scan: %d AOI(s) overdue", len(overdue))
+    orch = ScanOrchestrator()
+
+    for row in overdue:
+        aoi = AOI(
+            id=row.id, name=row.name,
+            bbox=(row.min_lon, row.min_lat, row.max_lon, row.max_lat),
+            domain=row.domain, active=row.active,
+            created_at=row.created_at, revisit_hours=row.revisit_hours,
+        )
+        try:
+            result = await orch.scan(aoi)
+            fused = result["fused_contacts"]
+            await broadcast({
+                "type": "auto_scan_complete",
+                "aoi_id": aoi.id,
+                "aoi_name": aoi.name,
+                "fused_count": len(fused),
+                "max_threat": max(
+                    (fc.threat_level for fc in fused),
+                    key=lambda t: {"critical": 3, "high": 2, "medium": 1, "low": 0}.get(t, 0),
+                    default="low",
+                ) if fused else "low",
+                "has_critical": any(fc.threat_level == "critical" for fc in fused),
+            })
+            logger.info("Auto-scan complete: %s — %d contacts", aoi.name, len(fused))
+        except Exception as exc:
+            logger.error("Auto-scan failed for %s: %s", aoi.name, exc)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Initialize the database on startup."""
+    """Initialize DB, seed AOIs, and start the autonomous scan scheduler."""
     await init_db()
     await _seed_demo_aoi()
-    logger.info("ARGUS API started")
+    _scheduler.add_job(
+        _autonomous_scan, "interval", hours=1,
+        id="auto_scan", coalesce=True, max_instances=1, replace_existing=True,
+    )
+    _scheduler.start()
+    # Start Redis subscriber for multi-worker WebSocket fan-out (no-op if REDIS_URL unset)
+    from api.routes.ws import start_redis_subscriber
+    asyncio.create_task(start_redis_subscriber())
+    logger.info("ARGUS API started — autonomous scan scheduler active (1h interval)")
     yield
+    _scheduler.shutdown(wait=False)
     logger.info("ARGUS API shutting down")
 
 

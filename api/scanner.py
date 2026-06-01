@@ -13,9 +13,11 @@ from core.fusion.temporal import TemporalCorrelator
 from core.models import AOI, Contact, FusedContact
 from db.database import ContactRow, FusedContactRow, AOIRow, async_session
 from layers.events import EventsLayer
+from layers.flights import FlightsLayer
 from layers.maritime import MaritimeLayer
 from layers.optical import OpticalLayer
 from layers.sar import SARLayer
+from layers.thermal import ThermalLayer
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ class ScanOrchestrator:
             "sar": SARLayer(),
             "events": EventsLayer(),
             "maritime": MaritimeLayer(),
+            "thermal": ThermalLayer(),
+            "flights": FlightsLayer(),
         }
         self.fusion = FusionEngine()
         self.temporal = TemporalCorrelator()

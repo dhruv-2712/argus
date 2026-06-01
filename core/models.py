@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-SourceType = Literal["optical", "sar", "maritime", "events"]
+SourceType = Literal["optical", "sar", "maritime", "events", "thermal", "flights"]
 
 DetectionType = Literal[
     "force_buildup",

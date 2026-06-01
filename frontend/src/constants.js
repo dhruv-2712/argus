@@ -11,6 +11,8 @@ export const SOURCE_COLORS = {
   sar: "#b07cff",
   events: "#ff7a45",
   maritime: "#2bd4c0",
+  thermal: "#ff6b35",
+  flights: "#e0d45a",
 }
 
 export const THREAT_ORDER = ["critical", "high", "medium", "low"]
@@ -21,6 +23,8 @@ export const SOURCE_CODE = {
   sar: "SAR",
   events: "SIGINT",
   maritime: "AIS",
+  thermal: "THRM",
+  flights: "FLGT",
 }
 
 // Temporal lifecycle states: color, label, and trend glyph.

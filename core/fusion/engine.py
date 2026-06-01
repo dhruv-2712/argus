@@ -20,6 +20,8 @@ SOURCE_RELIABILITY: dict[str, float] = {
     "sar": 1.00,       # all-weather radar, physical backscatter measurement
     "optical": 0.95,   # high-res imagery, but cloud/illumination dependent
     "maritime": 0.90,  # structured AIS positional data
+    "thermal": 0.85,   # VIIRS radiometric, coarser spatial resolution
+    "flights": 0.80,   # ADS-B self-reported, spoofable but high coverage
     "events": 0.70,    # news/sentiment, coarse geolocation, higher noise
 }
 
@@ -170,11 +172,12 @@ class FusionEngine:
         return dist_km <= radius_km
 
     def _score_cluster(self, cluster: list[Contact]) -> float:
-        """Apply corroboration scoring rules to a cluster.
+        """Score a cluster using Dempster-Shafer for multi-source and
+        reliability-weighted mean + corroboration multiplier for single-source.
 
-        Confidence is a source-reliability-weighted mean of constituent
-        confidences, then scaled by a corroboration multiplier keyed on the
-        number of *distinct* sources agreeing at this location.
+        Multi-source: blend DS threat belief (40%) with the corroboration score
+        (60%) so conflict between contradictory sensors depresses confidence
+        while agreement across independent sensors amplifies it.
         """
         unique_sources = {c.source for c in cluster}
         avg_conf = self._weighted_confidence(cluster)
@@ -183,10 +186,15 @@ class FusionEngine:
         if self._is_contradictory(cluster):
             return min(avg_conf, 0.4)
 
-        mult = corroboration_multiplier(n_sources)
         if n_sources <= 1:
-            return avg_conf * mult
-        return min(avg_conf * mult, 0.97)
+            return avg_conf * corroboration_multiplier(1)
+
+        # Multi-source: Dempster-Shafer + corroboration blend
+        from core.fusion.dempster_shafer import fuse_ds
+        raw = [{"source": c.source, "confidence": c.confidence} for c in cluster]
+        ds = fuse_ds(raw, SOURCE_RELIABILITY)
+        corr_score = min(avg_conf * corroboration_multiplier(n_sources), 0.97)
+        return min(round(0.4 * ds["ds_confidence"] + 0.6 * corr_score, 4), 0.97)
 
     def _weighted_confidence(self, cluster: list[Contact]) -> float:
         """Reliability-weighted mean of constituent confidences."""

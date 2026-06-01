@@ -19,6 +19,12 @@ function ringFeature(lat, lon, radiusKm, steps = 48) {
   for (let i = 0; i <= steps; i++) coords.push(destPoint(lat, lon, radiusKm, (360 / steps) * i))
   return { type: "Feature", properties: { kind: "obs_ring" }, geometry: { type: "Polygon", coordinates: [coords] } }
 }
+// LineString ring for trajectory layer (line layers don't accept Polygon)
+function lineRing(lat, lon, radiusKm, color, steps = 48) {
+  const coords = []
+  for (let i = 0; i <= steps; i++) coords.push(destPoint(lat, lon, radiusKm, (360 / steps) * i))
+  return { type: "Feature", properties: { color }, geometry: { type: "LineString", coordinates: coords } }
+}
 
 export default function Map({ aois, contacts, selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete }) {
   const mapRef = useRef(null)
@@ -28,7 +34,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
   const fittedRef = useRef(false)
   const aoisRef = useRef([])
   const selectedAOIRef = useRef(null)
-  const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true })
+  const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true, thermal: true, flights: true })
   const [cursor, setCursor] = useState(null)
   const [zoom, setZoom] = useState(3)
   const [zoomLevel, setZoomLevel] = useState(3)
@@ -96,6 +102,38 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
       map.addLayer({ id: "specter-ring-line", type: "line", source: "specter", filter: ["==", ["get", "kind"], "obs_ring"], paint: { "line-color": "#36dceb", "line-width": 1, "line-dasharray": [2, 2], "line-opacity": 0.6 } })
       // Avenues of approach (low-ground corridors), colored by trafficability.
       map.addLayer({ id: "specter-approach", type: "line", source: "specter", filter: ["==", ["get", "kind"], "approach"], paint: { "line-color": ["get", "color"], "line-width": 2.2, "line-opacity": 0.85 } })
+
+      // ── Contact density heatmap (visible at low zoom, fades above z9) ──
+      map.addSource("contacts-heat", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+      map.addLayer({
+        id: "contact-heat", type: "heatmap", source: "contacts-heat", maxzoom: 10,
+        paint: {
+          "heatmap-weight": ["interpolate", ["linear"], ["get", "conf"], 0, 0, 1, 1],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 4],
+          "heatmap-color": [
+            "interpolate", ["linear"], ["heatmap-density"],
+            0, "rgba(4,20,26,0)",
+            0.15, "rgba(54,220,235,0.3)",
+            0.4, "#b07cff",
+            0.7, "#ff9e2c",
+            1.0, "#ff4242",
+          ],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 6, 9, 28],
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.85, 10, 0],
+        },
+      })
+
+      // ── Escalation zone rings + trajectory lines ──────────────────────
+      map.addSource("trajectories", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+      map.addLayer({
+        id: "trajectory-lines", type: "line", source: "trajectories",
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 1.4,
+          "line-dasharray": [3, 4],
+          "line-opacity": 0.70,
+        },
+      })
 
       paintAOIBoxes(map)
     })
@@ -180,6 +218,45 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
       el.addEventListener("click", () => onContactClick(fc))
       markersRef.current.push(marker)
     }
+
+    // ── Contact density heatmap ───────────────────────────────────────
+    const heatSrc = map.getSource("contacts-heat")
+    if (heatSrc && map.isStyleLoaded()) {
+      heatSrc.setData({
+        type: "FeatureCollection",
+        features: contacts.map(c => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [c.lon, c.lat] },
+          properties: { conf: c.confidence ?? 0.5 },
+        })),
+      })
+    }
+
+    // ── Escalation zone rings + directional vectors ───────────────────
+    // Rings show the threat-spread uncertainty for escalating contacts.
+    // Directional vectors appear when heading data is available (flights/maritime).
+    const trajFeatures = []
+    contacts.forEach(c => {
+      if (c.lifecycle !== "escalating" && c.lifecycle !== "persistent") return
+      const color = THREAT_COLORS[c.threat_level] ?? "#ffce3a"
+      const radius = 3 + Math.min((c.persistence_score ?? 0) * 40, 22)
+      trajFeatures.push(lineRing(c.lat, c.lon, radius, color))
+
+      const heading = c.raw_evidence?.heading
+      const speedMs = c.raw_evidence?.velocity
+      const speedKt = c.raw_evidence?.speed_knots
+      if (heading != null) {
+        const kmh = speedMs != null ? speedMs * 3.6 : speedKt != null ? speedKt * 1.852 : 5
+        const dist = Math.max(kmh * 6, 10)
+        const dest = destPoint(c.lat, c.lon, dist, heading)
+        trajFeatures.push({
+          type: "Feature", properties: { color },
+          geometry: { type: "LineString", coordinates: [[c.lon, c.lat], dest] },
+        })
+      }
+    })
+    const trajSrc = map.getSource("trajectories")
+    if (trajSrc && map.isStyleLoaded()) trajSrc.setData({ type: "FeatureCollection", features: trajFeatures })
   }, [contacts, activeSources, zoomLevel])
 
   // SPECTER tactical overlay — terrain-derived geometry for selected contact.

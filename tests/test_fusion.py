@@ -88,8 +88,8 @@ def test_two_source_corroboration_boosts_confidence():
         make_contact("sar", 0.6, "construction", lat=34.49, lon=80.38),
     ])
     assert len(fused) == 1, "agreeing contacts must cluster into one"
-    # weighted base ~0.6, * 1.3 = 0.78 -> high
-    assert fused[0].confidence == pytest.approx(0.78, abs=0.02)
+    # DS-blended score: 0.4*ds_conf + 0.6*(weighted*1.3) ≈ 0.67 → high
+    assert fused[0].confidence == pytest.approx(0.67, abs=0.03)
     assert fused[0].threat_level == "high"
     assert set(fused[0].sources) == {"optical", "sar"}
 

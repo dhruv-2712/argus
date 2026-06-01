@@ -41,7 +41,7 @@ export function useLiveFeed() {
       ws.onmessage = (msg) => {
         let evt
         try { evt = JSON.parse(msg.data) } catch { return }
-        if (evt.type === "scan_complete") {
+        if (evt.type === "scan_complete" || evt.type === "auto_scan_complete") {
           qc.invalidateQueries({ queryKey: ["contacts"] })
           qc.invalidateQueries({ queryKey: ["regional"] })
           qc.invalidateQueries({ queryKey: ["aois"] })
