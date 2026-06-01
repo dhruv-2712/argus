@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, THREAT_ORDER } from "../constants"
 
-export default function Map({ aois, contacts, selectedAOI, onContactClick, drawMode, onDrawComplete }) {
+export default function Map({ aois, contacts, selectedAOI, selectedContact, onContactClick, drawMode, onDrawComplete }) {
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
@@ -103,6 +103,21 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
       markersRef.current.push(marker)
     })
   }, [contacts, activeSources])
+
+  // Fly to selected contact
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !selectedContact) return
+    map.flyTo({ center: [selectedContact.lon, selectedContact.lat], zoom: 11, duration: 900 })
+  }, [selectedContact])
+
+  // Fly to selected AOI
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !selectedAOI) return
+    const [minLon, minLat, maxLon, maxLat] = selectedAOI.bbox
+    map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 80, maxZoom: 10, duration: 900 })
+  }, [selectedAOI])
 
   // Draw mode
   useEffect(() => {

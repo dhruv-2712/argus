@@ -34,7 +34,7 @@ function TabButton({ active, onClick, icon, label, count }) {
   )
 }
 
-export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, onCreateAOI }) {
+export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, onContactSelect, onCreateAOI }) {
   const [tab, setTab] = useState("contacts")
   const [selectedContact, setSelectedContact] = useState(null)
   const [specter, setSpecter] = useState(null)
@@ -45,6 +45,7 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
   useEffect(() => {
     if (selectedAOI) {
       api.getAOIStatus(selectedAOI.id).then(setStatus).catch(() => {})
+      setTab("contacts")
     }
   }, [selectedAOI, contacts])
 
@@ -61,6 +62,7 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
   const handleContactClick = (c) => {
     setSelectedContact(c)
     setSpecter(null)
+    onContactSelect?.(c)
   }
 
   const shell = {

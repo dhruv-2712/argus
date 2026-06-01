@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { PenLine, X, AlertTriangle, CheckCircle2 } from "lucide-react"
 import Header from "./components/Header"
@@ -16,10 +16,15 @@ function ArgusApp() {
   const [contactFilters, setContactFilters] = useState({})
   const { data: contacts = [] } = useContacts(contactFilters)
   const scan = useScan()
+  const [selectedContact, setSelectedContact] = useState(null)
   const [drawMode, setDrawMode] = useState(false)
   const [pendingBbox, setPendingBbox] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [scanError, setScanError] = useState(null)
+
+  useEffect(() => {
+    setContactFilters(selectedAOI ? { aoi_id: selectedAOI.id } : {})
+  }, [selectedAOI])
 
   const handleScan = async (id) => {
     setScanError(null)
@@ -108,7 +113,8 @@ function ArgusApp() {
             aois={aois}
             contacts={contacts}
             selectedAOI={selectedAOI}
-            onContactClick={() => {}}
+            selectedContact={selectedContact}
+            onContactClick={setSelectedContact}
             drawMode={drawMode}
             onDrawComplete={handleDrawComplete}
           />
@@ -119,6 +125,7 @@ function ArgusApp() {
           aois={aois}
           selectedAOI={selectedAOI}
           onAOISelect={setSelectedAOI}
+          onContactSelect={setSelectedContact}
           onCreateAOI={() => { setPendingBbox(null); setShowModal(true) }}
         />
       </div>
