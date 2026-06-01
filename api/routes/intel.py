@@ -8,9 +8,10 @@ simultaneous escalation.
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlalchemy import select
 
 from db.database import AOIRow, FusedContactRow, async_session
@@ -18,6 +19,11 @@ from db.database import AOIRow, FusedContactRow, async_session
 router = APIRouter(prefix="/intel", tags=["intel"])
 
 logger = logging.getLogger(__name__)
+
+# In-memory TTL cache for terrain geometry (the elevation API is slow and
+# the same contact is inspected repeatedly).
+_TERRAIN_CACHE: dict[str, tuple[float, dict]] = {}
+_TERRAIN_TTL = 3600.0
 
 _THREAT_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -148,3 +154,39 @@ async def aoi_tracks(aoi_id: str) -> dict:
         reverse=True,
     )
     return {"aoi_id": aoi_id, "track_count": len(ordered), "tracks": ordered}
+
+
+@router.get("/terrain")
+async def terrain_geometry(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+) -> dict:
+    """Terrain-derived tactical geometry for a point: key terrain, avenues of
+    approach, observation radius — computed from real elevation samples.
+
+    Used by the map overlay to draw militarily grounded geometry. Cached so
+    repeated inspection of a contact is instant.
+    """
+    key = f"{round(lat, 3)}:{round(lon, 3)}"
+    now = time.time()
+    cached = _TERRAIN_CACHE.get(key)
+    if cached and now - cached[0] < _TERRAIN_TTL:
+        return cached[1]
+
+    # Imported lazily to avoid pulling LangGraph/Groq into the request path
+    # unless terrain is actually requested.
+    from core.simulation.ocoka import _fetch_elevations
+
+    terrain = await _fetch_elevations(lat, lon)
+    geometry = terrain.get("tactical_geometry") if isinstance(terrain, dict) else None
+    payload = {
+        "lat": lat,
+        "lon": lon,
+        "available": geometry is not None,
+        "tactical_geometry": geometry,
+        "terrain_type": terrain.get("terrain_type") if isinstance(terrain, dict) else None,
+        "error": terrain.get("error") if isinstance(terrain, dict) else "unavailable",
+    }
+    if geometry:
+        _TERRAIN_CACHE[key] = (now, payload)
+    return payload

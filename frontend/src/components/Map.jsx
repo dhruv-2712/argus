@@ -17,18 +17,14 @@ function destPoint(lat, lon, distKm, bearingDeg) {
 function ringFeature(lat, lon, radiusKm, steps = 48) {
   const coords = []
   for (let i = 0; i <= steps; i++) coords.push(destPoint(lat, lon, radiusKm, (360 / steps) * i))
-  return { type: "Feature", properties: { kind: "ring" }, geometry: { type: "Polygon", coordinates: [coords] } }
-}
-function approachFeature(lat, lon, distKm, bearingDeg) {
-  const outer = destPoint(lat, lon, distKm, bearingDeg)
-  const inner = destPoint(lat, lon, distKm * 0.45, bearingDeg)
-  return { type: "Feature", properties: { kind: "approach" }, geometry: { type: "LineString", coordinates: [outer, inner] } }
+  return { type: "Feature", properties: { kind: "obs_ring" }, geometry: { type: "Polygon", coordinates: [coords] } }
 }
 
-export default function Map({ aois, contacts, selectedAOI, selectedContact, onContactClick, drawMode, onDrawComplete }) {
+export default function Map({ aois, contacts, selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete }) {
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
+  const specterMarkersRef = useRef([])
   const fittedRef = useRef(false)
   const aoisRef = useRef([])
   const selectedAOIRef = useRef(null)
@@ -92,11 +88,14 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
       map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-boxes", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } })
       map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-boxes", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } })
 
-      // SPECTER tactical overlay — threat ring + avenues of approach.
+      // SPECTER tactical overlay — terrain-derived geometry (glyph-free,
+      // so it renders without a font source; labels are DOM markers).
       map.addSource("specter", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
-      map.addLayer({ id: "specter-ring-fill", type: "fill", source: "specter", filter: ["==", ["get", "kind"], "ring"], paint: { "fill-color": "#ff4242", "fill-opacity": 0.07 } })
-      map.addLayer({ id: "specter-ring-line", type: "line", source: "specter", filter: ["==", ["get", "kind"], "ring"], paint: { "line-color": "#ff4242", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } })
-      map.addLayer({ id: "specter-approach", type: "line", source: "specter", filter: ["==", ["get", "kind"], "approach"], paint: { "line-color": "#ff9e2c", "line-width": 1.6, "line-opacity": 0.8 } })
+      // Observation ring (line-of-sight horizon from the target).
+      map.addLayer({ id: "specter-ring-fill", type: "fill", source: "specter", filter: ["==", ["get", "kind"], "obs_ring"], paint: { "fill-color": "#36dceb", "fill-opacity": 0.05 } })
+      map.addLayer({ id: "specter-ring-line", type: "line", source: "specter", filter: ["==", ["get", "kind"], "obs_ring"], paint: { "line-color": "#36dceb", "line-width": 1, "line-dasharray": [2, 2], "line-opacity": 0.6 } })
+      // Avenues of approach (low-ground corridors), colored by trafficability.
+      map.addLayer({ id: "specter-approach", type: "line", source: "specter", filter: ["==", ["get", "kind"], "approach"], paint: { "line-color": ["get", "color"], "line-width": 2.2, "line-opacity": 0.85 } })
 
       paintAOIBoxes(map)
     })
@@ -183,26 +182,59 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
     }
   }, [contacts, activeSources, zoomLevel])
 
-  // SPECTER tactical overlay around the selected (simulated) contact
+  // SPECTER tactical overlay — terrain-derived geometry for selected contact.
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !map.isStyleLoaded()) return
     const src = map.getSource("specter")
     if (!src) return
 
-    if (!selectedContact || !selectedContact.simulation_run) {
+    // Clear prior label markers.
+    specterMarkersRef.current.forEach(m => m.remove())
+    specterMarkersRef.current = []
+
+    const geo = terrain?.tactical_geometry
+    if (!selectedContact || !geo) {
       src.setData({ type: "FeatureCollection", features: [] })
       return
     }
-    const { lat, lon } = selectedContact
-    const rKm = 6  // engagement ring radius
-    const features = [ringFeature(lat, lon, rKm)]
-    // Four cardinal avenues of approach.
-    for (const brng of [0, 90, 180, 270]) {
-      features.push(approachFeature(lat, lon, rKm * 1.8, brng))
-    }
+
+    const { target, key_terrain, avenues_of_approach = [], principal_obstacle, observation_radius_km } = geo
+    const tLat = target?.lat ?? selectedContact.lat
+    const tLon = target?.lon ?? selectedContact.lon
+
+    const features = []
+    // Observation ring at the true line-of-sight horizon.
+    if (observation_radius_km) features.push(ringFeature(tLat, tLon, observation_radius_km))
+    // Real avenues of approach: from the low-ground ingress point to target.
+    const TRAFFIC_COLOR = { unrestricted: "#2fe06e", restricted: "#ffce3a", severely_restricted: "#ff9e2c" }
+    avenues_of_approach.forEach(a => {
+      features.push({
+        type: "Feature",
+        properties: { kind: "approach", color: TRAFFIC_COLOR[a.trafficability] || "#ffce3a" },
+        geometry: { type: "LineString", coordinates: [[a.from_lon, a.from_lat], [tLon, tLat]] },
+      })
+    })
     src.setData({ type: "FeatureCollection", features })
-  }, [selectedContact])
+
+    // Key terrain + obstacle as DOM label markers (glyph-free layers above).
+    const addLabel = (lat, lon, glyph, text, color) => {
+      const el = document.createElement("div")
+      el.className = "mono"
+      el.style.cssText = `display:flex;flex-direction:column;align-items:center;pointer-events:none;color:${color};text-shadow:0 0 4px #04141a,0 0 2px #04141a;`
+      el.innerHTML = `<div style="font-size:15px;line-height:1">${glyph}</div><div style="font-size:8px;letter-spacing:0.06em;white-space:nowrap;margin-top:1px">${text}</div>`
+      const m = new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(map)
+      specterMarkersRef.current.push(m)
+    }
+    if (key_terrain) {
+      addLabel(key_terrain.lat, key_terrain.lon, "▲",
+        `KEY ${Math.round(key_terrain.elevation)}m`, key_terrain.commands_target ? "#ff4242" : "#36dceb")
+    }
+    if (principal_obstacle) {
+      addLabel(principal_obstacle.lat, principal_obstacle.lon, "⛰",
+        `OBST ${Math.round(principal_obstacle.elevation)}m`, "#b07cff")
+    }
+  }, [selectedContact, terrain])
 
   // Fly to selected contact
   useEffect(() => {

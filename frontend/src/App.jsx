@@ -9,7 +9,7 @@ import BootSequence from "./components/BootSequence"
 import ScanOverlay from "./components/ScanOverlay"
 import CommandPalette from "./components/CommandPalette"
 import TimelineScrubber from "./components/TimelineScrubber"
-import { useAOIs, useContacts, useScan } from "./hooks/useArgusData"
+import { useAOIs, useContacts, useScan, useTerrain } from "./hooks/useArgusData"
 import { useLiveFeed } from "./hooks/useLiveFeed"
 import { scanStart, bootHum } from "./lib/sound"
 
@@ -26,6 +26,7 @@ function ArgusApp() {
   const scan = useScan()
   const { connected: liveConnected, lastEvent } = useLiveFeed()
   const [selectedContact, setSelectedContact] = useState(null)
+  const { data: terrain } = useTerrain(selectedContact)
   const [booted, setBooted] = useState(() => sessionStorage.getItem("argus_booted") === "1")
   const [drawMode, setDrawMode] = useState(false)
   const [pendingBbox, setPendingBbox] = useState(null)
@@ -178,6 +179,7 @@ function ArgusApp() {
               contacts={contacts}
               selectedAOI={selectedAOI}
               selectedContact={selectedContact}
+              terrain={terrain}
               onContactClick={setSelectedContact}
               drawMode={drawMode}
               onDrawComplete={handleDrawComplete}

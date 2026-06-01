@@ -21,4 +21,5 @@ export const api = {
   downloadReportUrl: (id) => `${BASE}/reports/${id}/pdf`,
   getRegional: () => req("/intel/regional"),
   getTracks: (id) => req(`/intel/aoi/${id}/tracks`),
+  getTerrain: (lat, lon) => req(`/intel/terrain?lat=${lat}&lon=${lon}`),
 }

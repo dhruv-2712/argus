@@ -1,7 +1,77 @@
 import { useState } from "react"
-import { ArrowLeft, Zap, ChevronDown, ChevronRight, MapPin, Clock, Sigma } from "lucide-react"
+import { ArrowLeft, Zap, ChevronDown, ChevronRight, MapPin, Clock, Sigma, Mountain, Navigation } from "lucide-react"
 import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, LIFECYCLE } from "../constants"
-import { useSimulate, useContactDetail } from "../hooks/useArgusData"
+import { useSimulate, useContactDetail, useTerrain } from "../hooks/useArgusData"
+
+const TRAFFIC_LABEL = {
+  unrestricted: { t: "UNRESTRICTED", c: "var(--green)" },
+  restricted: { t: "RESTRICTED", c: "var(--yellow)" },
+  severely_restricted: { t: "SEVERELY RESTRICTED", c: "var(--amber)" },
+}
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+const toCompass = (b) => COMPASS[Math.round(b / 45) % 8]
+
+function TacticalGeometry({ contact }) {
+  const { data, isLoading } = useTerrain(contact)
+  const geo = data?.tactical_geometry
+
+  if (isLoading) {
+    return (
+      <div style={{ border: "1px solid var(--line)", marginBottom: 14, padding: "10px 11px" }}>
+        <div className="mono flex items-center" style={{ gap: 7, color: "var(--muted)", fontSize: 10.5, letterSpacing: "0.08em" }}>
+          <span style={{ display: "inline-block", animation: "spin 0.9s linear infinite", width: 11, height: 11, border: "2px solid rgba(54,220,235,0.25)", borderTopColor: "var(--accent)", borderRadius: "50%" }} />
+          RESOLVING TERRAIN…
+        </div>
+      </div>
+    )
+  }
+  if (!geo) return null
+
+  return (
+    <div style={{ border: "1px solid var(--line)", marginBottom: 14 }}>
+      <div className="mono flex items-center" style={{ gap: 7, background: "var(--panel)", padding: "7px 10px", borderBottom: "1px solid var(--line)" }}>
+        <Mountain size={12} style={{ color: "var(--accent)" }} />
+        <span className="label">Terrain-Derived Geometry</span>
+        <span className="mono" style={{ marginLeft: "auto", fontSize: 9.5, color: "var(--muted)" }}>
+          RELIEF {Math.round(geo.relief_m)}m
+        </span>
+      </div>
+      <div style={{ padding: "9px 11px" }}>
+        {/* Key terrain */}
+        <div className="mono flex items-center justify-between" style={{ fontSize: 11, marginBottom: 6 }}>
+          <span className="flex items-center" style={{ gap: 6, color: "var(--muted)" }}>
+            <span style={{ color: geo.key_terrain.commands_target ? "var(--red)" : "var(--accent)" }}>▲</span> KEY TERRAIN
+          </span>
+          <span style={{ color: "var(--text-bright)" }}>
+            {Math.round(geo.key_terrain.elevation)}m {geo.key_terrain.commands_target ? "(COMMANDS TGT)" : ""}
+          </span>
+        </div>
+        {/* Observation */}
+        <div className="mono flex items-center justify-between" style={{ fontSize: 11, marginBottom: 6 }}>
+          <span style={{ color: "var(--muted)" }}>OBSERVATION RADIUS</span>
+          <span style={{ color: "var(--text-bright)" }}>{geo.observation_radius_km} km LOS</span>
+        </div>
+        {/* Avenues of approach */}
+        <div className="label" style={{ marginTop: 9, marginBottom: 5 }}>Avenues of Approach</div>
+        {geo.avenues_of_approach.length === 0 && (
+          <div className="mono" style={{ fontSize: 10.5, color: "var(--dim)" }}>NONE — RESTRICTIVE TERRAIN</div>
+        )}
+        {geo.avenues_of_approach.map((a, i) => {
+          const tl = TRAFFIC_LABEL[a.trafficability] || TRAFFIC_LABEL.restricted
+          return (
+            <div key={i} className="mono flex items-center justify-between" style={{ fontSize: 10.5, marginBottom: 4 }}>
+              <span className="flex items-center" style={{ gap: 6, color: "var(--text)" }}>
+                <Navigation size={10} style={{ color: tl.c, transform: `rotate(${a.ingress_bearing}deg)` }} />
+                FROM {toCompass(a.ingress_bearing)} ({Math.round(a.ingress_bearing)}°)
+              </span>
+              <span style={{ color: tl.c, fontWeight: 700, letterSpacing: "0.04em" }}>{tl.t}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function ConfidenceBreakdown({ contactId, color }) {
   const { data } = useContactDetail(contactId)
@@ -195,6 +265,9 @@ export default function ContactDetail({ contact, specter, onBack }) {
 
         {/* Confidence breakdown — explainability */}
         <ConfidenceBreakdown contactId={contact.id} color={color} />
+
+        {/* Terrain-derived tactical geometry */}
+        <TacticalGeometry contact={contact} />
 
         {/* Track history */}
         <TrackHistory contact={contact} />

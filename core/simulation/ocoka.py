@@ -16,6 +16,7 @@ from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph
 
 from core.models import AOI, FusedContact
+from core.simulation.terrain import compute_tactical_geometry
 
 load_dotenv()
 
@@ -85,14 +86,20 @@ async def _fetch_elevations(lat: float, lon: float) -> dict:
         logger.warning("Elevation API failed: %s", exc)
         return {"error": str(exc)}
 
-    elevations = [r["elevation"] for r in data.get("results", []) if r.get("elevation") is not None]
+    results = data.get("results", [])
+    grid = [
+        {"lat": r["latitude"], "lon": r["longitude"], "elevation": r["elevation"]}
+        for r in results
+        if r.get("elevation") is not None
+    ]
+    elevations = [g["elevation"] for g in grid]
     if not elevations:
         return {"error": "no elevation data"}
 
     mean_elev = sum(elevations) / len(elevations)
     elev_range = max(elevations) - min(elevations)
 
-    return {
+    terrain = {
         "elevation_mean": round(mean_elev, 1),
         "elevation_range": round(elev_range, 1),
         "elevation_min": round(min(elevations), 1),
@@ -102,7 +109,14 @@ async def _fetch_elevations(lat: float, lon: float) -> dict:
         "grid_size": len(elevations),
         "center_lat": lat,
         "center_lon": lon,
+        "grid": grid,
     }
+    # Attach terrain-derived tactical geometry (key terrain, avenues of
+    # approach, observation radius) computed from the positioned grid.
+    geometry = compute_tactical_geometry(grid, lat, lon)
+    if geometry:
+        terrain["tactical_geometry"] = geometry
+    return terrain
 
 
 def _get_llm() -> ChatGroq:

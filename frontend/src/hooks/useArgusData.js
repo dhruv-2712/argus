@@ -65,3 +65,15 @@ export function useContactDetail(contactId) {
     enabled: !!contactId,
   })
 }
+
+export function useTerrain(contact) {
+  const lat = contact?.lat
+  const lon = contact?.lon
+  return useQuery({
+    queryKey: ["terrain", lat, lon],
+    queryFn: () => api.getTerrain(lat, lon),
+    enabled: lat != null && lon != null,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  })
+}
