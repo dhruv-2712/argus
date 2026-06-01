@@ -1,4 +1,4 @@
-const BASE = "http://localhost:8002"
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8002"
 
 async function req(url, opts = {}) {
   const r = await fetch(BASE + url, opts)
@@ -19,4 +19,6 @@ export const api = {
   generateReport: (id) => req(`/aoi/${id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ include_fused_contacts: true, threat_threshold: "low" }) }),
   listReports: (id) => req(`/aoi/${id}/reports`),
   downloadReportUrl: (id) => `${BASE}/reports/${id}/pdf`,
+  getRegional: () => req("/intel/regional"),
+  getTracks: (id) => req(`/intel/aoi/${id}/tracks`),
 }

@@ -6,6 +6,8 @@
 
 ARGUS fuses Sentinel-2 optical imagery, Sentinel-1 SAR, AIS maritime vessel tracks, and GDELT/ACLED conflict events into confidence-scored intelligence contacts. A LangGraph OCOKA pipeline (**SPECTER**) runs terrain analysis on high-confidence detections, and the system auto-generates PDF intelligence briefs. A React + MapLibre command-and-control UI renders everything on a live satellite map.
 
+![ARGUS Demo](docs/demo.gif)
+
 > **All data is open-source.** No classified sources are used. Built for research and education only.
 
 ---
@@ -94,6 +96,50 @@ The UI expects the API at `http://localhost:8002` (configured in `frontend/src/a
 cp .env.example .env
 docker compose up
 ```
+
+---
+
+## Deployment
+
+### Backend → Render (Web Service)
+
+1. Go to [render.com](https://render.com) → **New → Web Service** → connect your GitHub repo
+2. Settings:
+   - **Root Directory**: *(leave blank — repo root)*
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+3. **Environment Variables** (add in Render dashboard):
+   ```
+   GROQ_API_KEY=<your key>
+   ACLED_EMAIL=<optional>
+   ACLED_KEY=<optional>
+   AISHUB_USERNAME=<optional>
+   ```
+4. Deploy — note the URL Render gives you, e.g. `https://argus-api.onrender.com`
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your GitHub repo
+2. Settings:
+   - **Root Directory**: `frontend`
+   - **Framework Preset**: Vite *(auto-detected)*
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+3. **Environment Variables**:
+   ```
+   VITE_API_URL=https://argus-api.onrender.com
+   ```
+   *(replace with your actual Render URL)*
+4. Deploy
+
+> **CORS**: After deploy, add your Vercel URL to the FastAPI `allow_origins` list in `api/main.py`.
+
+### Frontend → Render (Static Site, alternative)
+
+1. **New → Static Site** → connect repo
+2. Root Directory: `frontend` | Build: `npm run build` | Publish: `dist`
+3. Add env var `VITE_API_URL=https://your-backend.onrender.com`
 
 ---
 

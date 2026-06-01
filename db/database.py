@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -82,6 +83,15 @@ class FusedContactRow(Base):
     summary = Column(Text, nullable=False)
     simulation_run = Column(Boolean, default=False)
 
+    # Temporal intelligence
+    track_id = Column(String, nullable=True)
+    first_seen = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, nullable=True)
+    observation_count = Column(Integer, default=1)
+    lifecycle = Column(String, default="new")
+    confidence_delta = Column(Float, default=0.0)
+    persistence_score = Column(Float, default=0.0)
+
 
 class IntelReportRow(Base):
     """Persistent intelligence report record."""
@@ -98,10 +108,37 @@ class IntelReportRow(Base):
     pdf_path = Column(String, nullable=True)
 
 
+# Columns added after the initial schema — applied to existing DBs on startup.
+_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "fused_contacts": [
+        ("track_id", "VARCHAR"),
+        ("first_seen", "DATETIME"),
+        ("last_seen", "DATETIME"),
+        ("observation_count", "INTEGER DEFAULT 1"),
+        ("lifecycle", "VARCHAR DEFAULT 'new'"),
+        ("confidence_delta", "FLOAT DEFAULT 0.0"),
+        ("persistence_score", "FLOAT DEFAULT 0.0"),
+    ],
+}
+
+
+def _apply_migrations(conn) -> None:
+    """Idempotently add any missing columns to existing tables (SQLite)."""
+    for table, columns in _MIGRATIONS.items():
+        existing = {
+            row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")
+        }
+        for name, ddl in columns:
+            if name not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                logger.info("Migration: added %s.%s", table, name)
+
+
 async def init_db() -> None:
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist, then apply column migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_apply_migrations)
     logger.info("Database initialized at %s", DB_PATH)
 
 

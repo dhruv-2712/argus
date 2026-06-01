@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { ArrowLeft, Zap, ChevronDown, ChevronRight, MapPin, Clock } from "lucide-react"
-import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE } from "../constants"
+import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, LIFECYCLE } from "../constants"
 import { useSimulate } from "../hooks/useArgusData"
 
 function OcokaSection({ label, value }) {
@@ -31,6 +31,45 @@ function DataCell({ icon, label, value }) {
     <div style={{ flex: 1, border: "1px solid var(--line)", background: "var(--panel)", padding: "7px 9px" }}>
       <div className="label flex items-center" style={{ gap: 4, marginBottom: 3 }}>{icon}{label}</div>
       <div className="mono" style={{ fontSize: 11, color: "var(--text-bright)", letterSpacing: "0.03em" }}>{value}</div>
+    </div>
+  )
+}
+
+function TrackHistory({ contact }) {
+  const lc = LIFECYCLE[contact.lifecycle] || LIFECYCLE.new
+  const obs = contact.observation_count || 1
+  const delta = contact.confidence_delta || 0
+  const persistence = Math.round((contact.persistence_score || 0) * 100)
+  const firstSeen = contact.first_seen ? new Date(contact.first_seen) : null
+  const daysTracked = firstSeen ? Math.max(0, Math.round((Date.now() - firstSeen) / 86400000)) : 0
+
+  return (
+    <div style={{ border: "1px solid var(--line)", marginBottom: 14 }}>
+      <div className="mono flex items-center justify-between" style={{ background: "var(--panel)", padding: "7px 10px", borderBottom: "1px solid var(--line)" }}>
+        <span className="label">Track History</span>
+        <span className="mono" style={{ color: lc.color, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em" }}>
+          {lc.glyph} {lc.label}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "var(--line)" }}>
+        <HistCell label="Sightings" value={`×${obs}`} />
+        <HistCell label="Persistence" value={`${persistence}%`} />
+        <HistCell label="First Seen" value={firstSeen ? `${daysTracked}d ago` : "—"} />
+        <HistCell
+          label="Conf. Trend"
+          value={delta === 0 ? "STABLE" : `${delta > 0 ? "+" : ""}${Math.round(delta * 100)}%`}
+          color={delta > 0 ? "var(--red)" : delta < 0 ? "var(--green)" : "var(--text-bright)"}
+        />
+      </div>
+    </div>
+  )
+}
+
+function HistCell({ label, value, color }) {
+  return (
+    <div style={{ background: "var(--panel)", padding: "7px 10px" }}>
+      <div className="label" style={{ marginBottom: 3 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 12, color: color || "var(--text-bright)", letterSpacing: "0.03em" }}>{value}</div>
     </div>
   )
 }
@@ -107,6 +146,9 @@ export default function ContactDetail({ contact, specter, onBack }) {
           <DataCell icon={<MapPin size={9} />} label="Grid" value={`${contact.lat?.toFixed(4)}°${contact.lat >= 0 ? "N" : "S"} ${contact.lon?.toFixed(4)}°${contact.lon >= 0 ? "E" : "W"}`} />
           <DataCell icon={<Clock size={9} />} label="DTG" value={contact.timestamp ? new Date(contact.timestamp).toISOString().slice(0, 16).replace("T", " ") + "Z" : "—"} />
         </div>
+
+        {/* Track history */}
+        <TrackHistory contact={contact} />
 
         {/* SPECTER */}
         {contact.simulation_run && specter ? (

@@ -27,6 +27,13 @@ def _fused_row_to_dict(row: FusedContactRow) -> dict:
         "threat_level": row.threat_level,
         "summary": row.summary,
         "simulation_run": row.simulation_run,
+        "track_id": row.track_id,
+        "first_seen": row.first_seen.isoformat() if row.first_seen else None,
+        "last_seen": row.last_seen.isoformat() if row.last_seen else None,
+        "observation_count": row.observation_count or 1,
+        "lifecycle": row.lifecycle or "new",
+        "confidence_delta": row.confidence_delta or 0.0,
+        "persistence_score": row.persistence_score or 0.0,
     }
 
 

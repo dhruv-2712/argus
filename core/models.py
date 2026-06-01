@@ -50,6 +50,11 @@ class Contact(BaseModel):
     threat_level: Literal["low", "medium", "high", "critical"] | None = None
 
 
+LifecycleState = Literal[
+    "new", "persistent", "escalating", "deescalating", "resolved"
+]
+
+
 class FusedContact(BaseModel):
     """Output of the fusion engine — one FusedContact per geographic cluster."""
 
@@ -65,6 +70,15 @@ class FusedContact(BaseModel):
     threat_level: Literal["low", "medium", "high", "critical"]
     summary: str
     simulation_run: bool = False
+
+    # ── Temporal intelligence (populated by TemporalCorrelator) ──
+    track_id: str | None = None
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
+    observation_count: int = 1
+    lifecycle: LifecycleState = "new"
+    confidence_delta: float = 0.0
+    persistence_score: float = 0.0
 
 
 class IntelReport(BaseModel):

@@ -1,4 +1,4 @@
-import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE } from "../constants"
+import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, LIFECYCLE } from "../constants"
 
 function timeAgo(ts) {
   const diff = (Date.now() - new Date(ts)) / 1000
@@ -11,6 +11,9 @@ function timeAgo(ts) {
 export default function ContactCard({ contact, onClick }) {
   const color = THREAT_COLORS[contact.threat_level] || "#6c8090"
   const conf = Math.round((contact.confidence || 0) * 100)
+  const lc = LIFECYCLE[contact.lifecycle] || LIFECYCLE.new
+  const obs = contact.observation_count || 1
+  const delta = contact.confidence_delta || 0
 
   return (
     <div
@@ -38,6 +41,19 @@ export default function ContactCard({ contact, onClick }) {
           <span>#{contact.id?.slice(0, 6)}</span>
           <span style={{ color: "var(--muted)" }}>T-{timeAgo(contact.timestamp)}</span>
         </div>
+      </div>
+
+      {/* Lifecycle / track strip */}
+      <div className="flex items-center mono" style={{ gap: 8, marginBottom: 6, fontSize: 9 }}>
+        <span style={{ color: lc.color, letterSpacing: "0.08em", fontWeight: 700 }}>
+          {lc.glyph} {lc.label}
+        </span>
+        {obs > 1 && <span style={{ color: "var(--muted)" }}>×{obs} SIGHTINGS</span>}
+        {delta !== 0 && (
+          <span style={{ color: delta > 0 ? "var(--red)" : "var(--green)" }}>
+            {delta > 0 ? "+" : ""}{Math.round(delta * 100)}%
+          </span>
+        )}
       </div>
 
       {/* Detection type */}

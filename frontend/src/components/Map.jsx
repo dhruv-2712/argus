@@ -119,8 +119,10 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#04080c" }}>
       <div ref={mapRef} style={{ position: "absolute", inset: 0 }} />
 
-      {/* Screen FX + frame */}
+      {/* Screen FX + frame + war-room grid/reticle */}
+      <div className="tac-grid" />
       <div className="map-fx" />
+      <div className="reticle"><span className="reticle-ring" /></div>
       <span className="frame-corner tl" />
       <span className="frame-corner tr" />
       <span className="frame-corner bl" />

@@ -5,6 +5,7 @@ import Header from "./components/Header"
 import Map from "./components/Map"
 import RightPanel from "./components/RightPanel"
 import CreateAOIModal from "./components/CreateAOIModal"
+import TheaterPosture from "./components/TheaterPosture"
 import { useAOIs, useContacts, useScan } from "./hooks/useArgusData"
 
 const qc = new QueryClient()
@@ -61,6 +62,8 @@ function ArgusApp() {
         onScan={handleScan}
         scanning={scan.isPending}
       />
+
+      <TheaterPosture aois={aois} onSelectAOI={setSelectedAOI} />
 
       {scanError && (
         <AlertStrip kind="error" icon={<AlertTriangle size={13} />}>

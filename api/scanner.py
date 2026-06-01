@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.fusion.engine import FusionEngine
+from core.fusion.temporal import TemporalCorrelator
 from core.models import AOI, Contact, FusedContact
 from db.database import ContactRow, FusedContactRow, AOIRow, async_session
 from layers.events import EventsLayer
@@ -30,6 +31,7 @@ class ScanOrchestrator:
             "maritime": MaritimeLayer(),
         }
         self.fusion = FusionEngine()
+        self.temporal = TemporalCorrelator()
 
     async def scan(
         self, aoi: AOI, layers: list[str] | None = None
@@ -55,6 +57,12 @@ class ScanOrchestrator:
 
         fused = self.fusion.fuse(all_contacts)
 
+        # Temporal correlation: link this scan's contacts to historical tracks,
+        # classify lifecycle, and calibrate confidence by persistence.
+        now = datetime.now(timezone.utc)
+        history = await self._load_history(aoi.id)
+        self.temporal.correlate(fused, history, now)
+
         # Run SPECTER on contacts above threshold
         specter_results: dict[str, dict] = {}
         from core.simulation.ocoka import Specter
@@ -77,6 +85,30 @@ class ScanOrchestrator:
             "layers_run": list(tasks.keys()),
             "specter_results": specter_results,
         }
+
+    async def _load_history(self, aoi_id: str, limit: int = 500) -> list[dict]:
+        """Load prior fused-contact records for an AOI for temporal correlation."""
+        async with async_session() as session:
+            result = await session.execute(
+                select(FusedContactRow)
+                .where(FusedContactRow.aoi_id == aoi_id)
+                .order_by(FusedContactRow.timestamp.desc())
+                .limit(limit)
+            )
+            rows = result.scalars().all()
+
+        return [
+            {
+                "track_id": r.track_id or r.id,
+                "lat": r.lat,
+                "lon": r.lon,
+                "confidence": r.confidence,
+                "first_seen": r.first_seen or r.timestamp,
+                "observation_count": r.observation_count or 1,
+                "timestamp": r.timestamp,
+            }
+            for r in rows
+        ]
 
     async def _persist(
         self,
@@ -106,6 +138,10 @@ class ScanOrchestrator:
                     lat=fc.lat, lon=fc.lon, timestamp=fc.timestamp,
                     threat_level=fc.threat_level, summary=fc.summary,
                     simulation_run=fc.simulation_run,
+                    track_id=fc.track_id, first_seen=fc.first_seen,
+                    last_seen=fc.last_seen, observation_count=fc.observation_count,
+                    lifecycle=fc.lifecycle, confidence_delta=fc.confidence_delta,
+                    persistence_score=fc.persistence_score,
                 ))
 
             await session.execute(

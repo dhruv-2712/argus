@@ -91,6 +91,41 @@ body {
 .frame-corner.bl { bottom: 8px; left: 8px; border-bottom: 1px solid var(--accent); border-left: 1px solid var(--accent); }
 .frame-corner.br { bottom: 8px; right: 8px; border-bottom: 1px solid var(--accent); border-right: 1px solid var(--accent); }
 
+/* Tactical grid overlay for the map (war-room feel) */
+.tac-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background-image:
+    linear-gradient(rgba(54,220,235,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54,220,235,0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* Center targeting reticle */
+.reticle {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px; height: 64px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.5;
+}
+.reticle::before, .reticle::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.reticle::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+.reticle::after { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
+.reticle-ring {
+  position: absolute; inset: 18px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+}
+
 /* Screen overlay: vignette + faint scanlines for the map */
 .map-fx {
   position: absolute;

@@ -7,7 +7,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import aoi, contacts, monitor, reports
+from api.routes import aoi, contacts, intel, monitor, reports
 from db.database import init_db
 
 logging.basicConfig(
@@ -45,6 +45,7 @@ app.include_router(aoi.router)
 app.include_router(contacts.router)
 app.include_router(monitor.router)
 app.include_router(reports.router)
+app.include_router(intel.router)
 
 
 @app.get("/health")

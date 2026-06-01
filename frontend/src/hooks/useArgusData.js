@@ -44,3 +44,7 @@ export function useSimulate() {
 export function useGenerateReport() {
   return useMutation({ mutationFn: (id) => api.generateReport(id) })
 }
+
+export function useRegional() {
+  return useQuery({ queryKey: ["regional"], queryFn: api.getRegional, refetchInterval: 30000 })
+}

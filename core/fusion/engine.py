@@ -14,6 +14,26 @@ logger = logging.getLogger(__name__)
 # if they share a location but differ in detection type.
 _TEMPORAL_COHERENCE_HOURS = 48
 
+# Per-source reliability weights for confidence calibration. Physical,
+# all-weather sensors are trusted above coarse, noisier OSINT signals.
+SOURCE_RELIABILITY: dict[str, float] = {
+    "sar": 1.00,       # all-weather radar, physical backscatter measurement
+    "optical": 0.95,   # high-res imagery, but cloud/illumination dependent
+    "maritime": 0.90,  # structured AIS positional data
+    "events": 0.70,    # news/sentiment, coarse geolocation, higher noise
+}
+
+
+def assign_threat_level(confidence: float) -> str:
+    """Map a confidence score to a threat level. Shared across the engine."""
+    if confidence > 0.85:
+        return "critical"
+    if confidence > 0.6:
+        return "high"
+    if confidence >= 0.35:
+        return "medium"
+    return "low"
+
 
 class FusionEngine:
     """Clusters geographically proximate contacts and applies corroboration scoring."""
@@ -94,9 +114,14 @@ class FusionEngine:
         return dist_km <= radius_km
 
     def _score_cluster(self, cluster: list[Contact]) -> float:
-        """Apply corroboration scoring rules to a cluster."""
+        """Apply corroboration scoring rules to a cluster.
+
+        Confidence is a source-reliability-weighted mean of constituent
+        confidences, then scaled by a corroboration multiplier keyed on the
+        number of *distinct* sources agreeing at this location.
+        """
         unique_sources = {c.source for c in cluster}
-        avg_conf = sum(c.confidence for c in cluster) / len(cluster)
+        avg_conf = self._weighted_confidence(cluster)
         n_sources = len(unique_sources)
 
         if self._is_contradictory(cluster):
@@ -111,6 +136,16 @@ class FusionEngine:
         # 3+ sources
         return min(avg_conf * 1.6, 0.97)
 
+    def _weighted_confidence(self, cluster: list[Contact]) -> float:
+        """Reliability-weighted mean of constituent confidences."""
+        total_w = sum(SOURCE_RELIABILITY.get(c.source, 0.8) for c in cluster)
+        if total_w == 0:
+            return sum(c.confidence for c in cluster) / len(cluster)
+        weighted = sum(
+            c.confidence * SOURCE_RELIABILITY.get(c.source, 0.8) for c in cluster
+        )
+        return weighted / total_w
+
     def _is_contradictory(self, cluster: list[Contact]) -> bool:
         """Detect contradiction: same location, different detection types, far apart in time."""
         if len(cluster) < 2:
@@ -124,17 +159,9 @@ class FusionEngine:
         span_hours = (timestamps[-1] - timestamps[0]).total_seconds() / 3600
         return span_hours > _TEMPORAL_COHERENCE_HOURS
 
-    def _assign_threat_level(
-        self, confidence: float
-    ) -> str:
-        """Map confidence score to threat level."""
-        if confidence > 0.85:
-            return "critical"
-        if confidence > 0.6:
-            return "high"
-        if confidence >= 0.35:
-            return "medium"
-        return "low"
+    def _assign_threat_level(self, confidence: float) -> str:
+        """Map confidence score to threat level (delegates to shared helper)."""
+        return assign_threat_level(confidence)
 
     def _build_summary(
         self,
