@@ -1,7 +1,53 @@
 import { useState } from "react"
-import { ArrowLeft, Zap, ChevronDown, ChevronRight, MapPin, Clock } from "lucide-react"
+import { ArrowLeft, Zap, ChevronDown, ChevronRight, MapPin, Clock, Sigma } from "lucide-react"
 import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, LIFECYCLE } from "../constants"
-import { useSimulate } from "../hooks/useArgusData"
+import { useSimulate, useContactDetail } from "../hooks/useArgusData"
+
+function ConfidenceBreakdown({ contactId, color }) {
+  const { data } = useContactDetail(contactId)
+  const b = data?.confidence_breakdown
+  if (!b || !b.contributions?.length) return null
+
+  return (
+    <div style={{ border: "1px solid var(--line)", marginBottom: 14 }}>
+      <div className="mono flex items-center" style={{ gap: 7, background: "var(--panel)", padding: "7px 10px", borderBottom: "1px solid var(--line)" }}>
+        <Sigma size={12} style={{ color: "var(--accent)" }} />
+        <span className="label">Why This Score</span>
+      </div>
+      <div style={{ padding: "9px 11px" }}>
+        {/* Per-source contributions */}
+        {b.contributions.map((c, i) => (
+          <div key={i} className="mono flex items-center justify-between" style={{ fontSize: 10.5, marginBottom: 5 }}>
+            <span style={{ color: SOURCE_COLORS[c.source] || "var(--muted)", fontWeight: 700, width: 56 }}>
+              {SOURCE_CODE[c.source] || c.source?.toUpperCase()}
+            </span>
+            <span style={{ color: "var(--muted)" }}>{Math.round(c.confidence * 100)}%</span>
+            <span style={{ color: "var(--dim)" }}>× rel {c.reliability}</span>
+            <span style={{ color: "var(--text-bright)", width: 44, textAlign: "right" }}>{c.weighted}</span>
+          </div>
+        ))}
+        <div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: 8 }}>
+          <Row label="Weighted base" value={`${Math.round(b.weighted_base * 100)}%`} />
+          <Row label={b.corroboration_label} value={`× ${b.corroboration_multiplier}`} accent />
+          {b.capped && <Row label="Capped at ceiling" value="0.97" warn />}
+          <div className="mono flex items-center justify-between" style={{ fontSize: 12.5, marginTop: 7, fontWeight: 700 }}>
+            <span style={{ color: "var(--text-bright)", letterSpacing: "0.06em" }}>FUSED CONFIDENCE</span>
+            <span style={{ color }}>{Math.round(b.final * 100)}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, value, accent, warn }) {
+  return (
+    <div className="mono flex items-center justify-between" style={{ fontSize: 11, marginBottom: 4 }}>
+      <span style={{ color: warn ? "var(--amber)" : "var(--muted)" }}>{label}</span>
+      <span style={{ color: warn ? "var(--amber)" : accent ? "var(--accent)" : "var(--text-bright)", fontWeight: accent ? 700 : 400 }}>{value}</span>
+    </div>
+  )
+}
 
 function OcokaSection({ label, value }) {
   const [open, setOpen] = useState(false)
@@ -146,6 +192,9 @@ export default function ContactDetail({ contact, specter, onBack }) {
           <DataCell icon={<MapPin size={9} />} label="Grid" value={`${contact.lat?.toFixed(4)}°${contact.lat >= 0 ? "N" : "S"} ${contact.lon?.toFixed(4)}°${contact.lon >= 0 ? "E" : "W"}`} />
           <DataCell icon={<Clock size={9} />} label="DTG" value={contact.timestamp ? new Date(contact.timestamp).toISOString().slice(0, 16).replace("T", " ") + "Z" : "—"} />
         </div>
+
+        {/* Confidence breakdown — explainability */}
+        <ConfidenceBreakdown contactId={contact.id} color={color} />
 
         {/* Track history */}
         <TrackHistory contact={contact} />

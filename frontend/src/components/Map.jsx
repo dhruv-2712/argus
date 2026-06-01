@@ -3,6 +3,28 @@ import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, THREAT_ORDER } from "../constants"
 
+// ── Geo helpers for the SPECTER overlay ──────────────────────────
+const R_EARTH = 6371 // km
+function destPoint(lat, lon, distKm, bearingDeg) {
+  const br = (bearingDeg * Math.PI) / 180
+  const lat1 = (lat * Math.PI) / 180
+  const lon1 = (lon * Math.PI) / 180
+  const dr = distKm / R_EARTH
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(dr) + Math.cos(lat1) * Math.sin(dr) * Math.cos(br))
+  const lon2 = lon1 + Math.atan2(Math.sin(br) * Math.sin(dr) * Math.cos(lat1), Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2))
+  return [(lon2 * 180) / Math.PI, (lat2 * 180) / Math.PI]
+}
+function ringFeature(lat, lon, radiusKm, steps = 48) {
+  const coords = []
+  for (let i = 0; i <= steps; i++) coords.push(destPoint(lat, lon, radiusKm, (360 / steps) * i))
+  return { type: "Feature", properties: { kind: "ring" }, geometry: { type: "Polygon", coordinates: [coords] } }
+}
+function approachFeature(lat, lon, distKm, bearingDeg) {
+  const outer = destPoint(lat, lon, distKm, bearingDeg)
+  const inner = destPoint(lat, lon, distKm * 0.45, bearingDeg)
+  return { type: "Feature", properties: { kind: "approach" }, geometry: { type: "LineString", coordinates: [outer, inner] } }
+}
+
 export default function Map({ aois, contacts, selectedAOI, selectedContact, onContactClick, drawMode, onDrawComplete }) {
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
@@ -13,6 +35,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
   const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true })
   const [cursor, setCursor] = useState(null)
   const [zoom, setZoom] = useState(3)
+  const [zoomLevel, setZoomLevel] = useState(3)
 
   const paintAOIBoxes = (map) => {
     const src = map.getSource("aoi-boxes")
@@ -68,11 +91,22 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
       map.addSource("aoi-boxes", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
       map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-boxes", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } })
       map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-boxes", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } })
+
+      // SPECTER tactical overlay — threat ring + avenues of approach.
+      map.addSource("specter", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+      map.addLayer({ id: "specter-ring-fill", type: "fill", source: "specter", filter: ["==", ["get", "kind"], "ring"], paint: { "fill-color": "#ff4242", "fill-opacity": 0.07 } })
+      map.addLayer({ id: "specter-ring-line", type: "line", source: "specter", filter: ["==", ["get", "kind"], "ring"], paint: { "line-color": "#ff4242", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } })
+      map.addLayer({ id: "specter-approach", type: "line", source: "specter", filter: ["==", ["get", "kind"], "approach"], paint: { "line-color": "#ff9e2c", "line-width": 1.6, "line-opacity": 0.8 } })
+
       paintAOIBoxes(map)
     })
 
     map.on("mousemove", (e) => setCursor([e.lngLat.lng, e.lngLat.lat]))
-    map.on("zoom", () => setZoom(map.getZoom()))
+    map.on("zoom", () => {
+      const z = map.getZoom()
+      setZoom(z)
+      setZoomLevel((prev) => (Math.round(z) !== prev ? Math.round(z) : prev))
+    })
 
     return () => { map.remove(); mapInstance.current = null }
   }, [])
@@ -99,29 +133,76 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
     if (map && map.isStyleLoaded()) paintAOIBoxes(map)
   }, [selectedAOI])
 
-  // Update contact markers
+  // Update contact markers (with low-zoom clustering)
   useEffect(() => {
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
     const map = mapInstance.current
     if (!map || !contacts) return
 
-    contacts.filter(c => {
+    const visible = contacts.filter(c => {
       const src = c.sources?.[0]
       return activeSources[src] !== false
-    }).forEach(fc => {
+    })
+
+    // Cluster when zoomed out so 10 theaters don't drown in markers.
+    if (zoomLevel < 6 && visible.length > 1) {
+      const cell = zoomLevel < 4 ? 4 : 1.5  // degrees per cluster cell
+      const buckets = new Map()
+      visible.forEach(fc => {
+        const key = `${Math.round(fc.lat / cell)}:${Math.round(fc.lon / cell)}`
+        if (!buckets.has(key)) buckets.set(key, [])
+        buckets.get(key).push(fc)
+      })
+      buckets.forEach(group => {
+        if (group.length === 1) { addDiamond(map, group[0]); return }
+        const top = group.reduce((a, b) => (THREAT_ORDER.indexOf(a.threat_level) <= THREAT_ORDER.indexOf(b.threat_level) ? a : b))
+        const color = THREAT_COLORS[top.threat_level] || "#6c8090"
+        const lat = group.reduce((s, c) => s + c.lat, 0) / group.length
+        const lon = group.reduce((s, c) => s + c.lon, 0) / group.length
+        const el = document.createElement("div")
+        el.className = "mono"
+        el.style.cssText = `min-width:24px;height:24px;padding:0 5px;display:flex;align-items:center;justify-content:center;background:rgba(7,11,16,0.9);border:1.5px solid ${color};color:${color};font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 0 10px ${color}66;border-radius:50%;`
+        el.textContent = group.length
+        el.addEventListener("click", () => map.flyTo({ center: [lon, lat], zoom: 8, duration: 700 }))
+        markersRef.current.push(new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(map))
+      })
+    } else {
+      visible.forEach(fc => addDiamond(map, fc))
+    }
+
+    function addDiamond(map, fc) {
       const color = THREAT_COLORS[fc.threat_level] || "#6c8090"
       const size = 8 + Math.round((fc.confidence || 0.5) * 10)
       const el = document.createElement("div")
       el.style.cssText = `width:${size}px;height:${size}px;background:${color};border:1.5px solid #04141a;cursor:pointer;box-shadow:0 0 8px ${color}aa,0 0 2px ${color};transform:rotate(45deg);`
       if (fc.threat_level === "critical") el.className = "pulse-critical"
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([fc.lon, fc.lat])
-        .addTo(map)
+      const marker = new maplibregl.Marker({ element: el }).setLngLat([fc.lon, fc.lat]).addTo(map)
       el.addEventListener("click", () => onContactClick(fc))
       markersRef.current.push(marker)
-    })
-  }, [contacts, activeSources])
+    }
+  }, [contacts, activeSources, zoomLevel])
+
+  // SPECTER tactical overlay around the selected (simulated) contact
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !map.isStyleLoaded()) return
+    const src = map.getSource("specter")
+    if (!src) return
+
+    if (!selectedContact || !selectedContact.simulation_run) {
+      src.setData({ type: "FeatureCollection", features: [] })
+      return
+    }
+    const { lat, lon } = selectedContact
+    const rKm = 6  // engagement ring radius
+    const features = [ringFeature(lat, lon, rKm)]
+    // Four cardinal avenues of approach.
+    for (const brng of [0, 90, 180, 270]) {
+      features.push(approachFeature(lat, lon, rKm * 1.8, brng))
+    }
+    src.setData({ type: "FeatureCollection", features })
+  }, [selectedContact])
 
   // Fly to selected contact
   useEffect(() => {
