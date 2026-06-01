@@ -177,6 +177,190 @@ body {
 .maplibregl-ctrl-attrib { background: rgba(7,11,16,0.75) !important; }
 .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
 
+/* ════════════════════════════════════════════════
+   CINEMATIC WAR-ROOM LAYER
+   ════════════════════════════════════════════════ */
+
+/* Global CRT scanlines + flicker over the whole app */
+.crt-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9000;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.13) 0px,
+      rgba(0, 0, 0, 0.13) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+.crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(2, 6, 10, 0.55) 100%);
+  animation: crt-flicker 5.5s steps(60) infinite;
+}
+@keyframes crt-flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.86; }
+  98% { opacity: 1; }
+  99% { opacity: 0.92; }
+}
+
+/* Faint moving sat-downlink sheen across the top */
+.uplink-sheen {
+  position: fixed;
+  top: 0; left: 0; right: 0; height: 2px;
+  z-index: 9001;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
+  animation: sweep 4s linear infinite;
+}
+
+/* ── Boot sequence ──────────────────────────── */
+.boot-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: radial-gradient(ellipse at center, #060d13 0%, #03070a 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  animation: boot-in 0.4s ease;
+}
+.boot-closing { animation: boot-out 0.5s ease forwards; }
+@keyframes boot-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes boot-out {
+  to { opacity: 0; transform: scale(1.04); filter: brightness(2.4); }
+}
+
+.boot-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(54, 220, 235, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54, 220, 235, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 80%);
+}
+.boot-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 4px);
+  pointer-events: none;
+  opacity: 0.4;
+}
+.boot-reticle {
+  position: absolute;
+  width: 460px; height: 460px;
+  opacity: 0.18;
+}
+.boot-reticle-ring {
+  position: absolute; inset: 0;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  animation: spin 14s linear infinite;
+}
+.boot-reticle-ring.r2 {
+  inset: 70px;
+  border-style: dashed;
+  animation: spin 9s linear infinite reverse;
+}
+
+.boot-console {
+  position: relative;
+  z-index: 2;
+  width: min(620px, 86vw);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(54, 220, 235, 0.5);
+}
+.boot-line { white-space: pre; animation: boot-type 0.18s ease; }
+@keyframes boot-type { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; } }
+.boot-title { font-size: 20px; font-weight: 700; letter-spacing: 0.28em; color: var(--text-bright); }
+.boot-sub { font-size: 11px; letter-spacing: 0.18em; color: var(--muted); margin-bottom: 6px; }
+.boot-line.ok { color: var(--green); text-shadow: 0 0 6px rgba(47, 224, 110, 0.4); }
+.boot-line.warn { color: var(--amber); text-shadow: 0 0 6px rgba(255, 158, 44, 0.4); }
+.boot-final {
+  color: var(--text-bright); font-weight: 700; letter-spacing: 0.16em;
+  margin-top: 6px; animation: boot-pulse 0.9s ease infinite alternate;
+}
+@keyframes boot-pulse { from { text-shadow: 0 0 6px var(--accent-glow); } to { text-shadow: 0 0 20px var(--accent); } }
+.boot-cursor { color: var(--accent); animation: blink 1s step-end infinite; }
+.boot-skip {
+  position: absolute; bottom: 26px; right: 30px;
+  font-size: 9px; letter-spacing: 0.2em; color: var(--dim);
+  z-index: 2;
+}
+
+/* ── Scan overlay (during active scan) ──────── */
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(54,220,235,0.04) 0%, rgba(3,7,10,0.35) 100%);
+  animation: boot-in 0.3s ease;
+}
+.scan-radar {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 300px; height: 300px;
+  transform: translate(-50%, -50%);
+}
+.scan-radar-ring {
+  position: absolute; inset: 0;
+  border: 1px solid rgba(54, 220, 235, 0.35);
+  border-radius: 50%;
+}
+.scan-radar-ring.r2 { inset: 50px; opacity: 0.6; }
+.scan-radar-ring.r3 { inset: 100px; opacity: 0.4; }
+.scan-radar-cross {
+  position: absolute; background: rgba(54, 220, 235, 0.25);
+}
+.scan-radar-cross.v { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+.scan-radar-cross.h { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
+.scan-radar-sweep {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(54, 220, 235, 0.55) 50deg, transparent 60deg);
+  animation: spin 1.8s linear infinite;
+}
+.scan-vbar, .scan-hbar {
+  position: absolute;
+  background: linear-gradient(var(--accent), transparent);
+  opacity: 0.4;
+}
+.scan-vbar { left: 50%; top: 0; bottom: 0; width: 1px; animation: scan-v 2.4s ease-in-out infinite; }
+.scan-hbar { top: 50%; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan-h 3s ease-in-out infinite; }
+@keyframes scan-v { 0%,100% { opacity: 0.15; } 50% { opacity: 0.5; } }
+@keyframes scan-h { 0%,100% { opacity: 0.15; } 50% { opacity: 0.5; } }
+.scan-readout {
+  position: absolute;
+  bottom: 80px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(7, 11, 16, 0.92);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+  padding: 10px 20px;
+  font-size: 12px; letter-spacing: 0.16em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.scan-blip { animation: blink 0.8s ease-in-out infinite; margin-right: 8px; }
+.scan-dots::after { content: ""; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+
 /* ── Layout utilities (preserved) ───────────── */
 .flex { display: flex; }
 .items-center { align-items: center; }

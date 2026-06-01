@@ -6,6 +6,8 @@ import Map from "./components/Map"
 import RightPanel from "./components/RightPanel"
 import CreateAOIModal from "./components/CreateAOIModal"
 import TheaterPosture from "./components/TheaterPosture"
+import BootSequence from "./components/BootSequence"
+import ScanOverlay from "./components/ScanOverlay"
 import { useAOIs, useContacts, useScan } from "./hooks/useArgusData"
 
 const qc = new QueryClient()
@@ -17,6 +19,7 @@ function ArgusApp() {
   const { data: contacts = [] } = useContacts(contactFilters)
   const scan = useScan()
   const [selectedContact, setSelectedContact] = useState(null)
+  const [booted, setBooted] = useState(() => sessionStorage.getItem("argus_booted") === "1")
   const [drawMode, setDrawMode] = useState(false)
   const [pendingBbox, setPendingBbox] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -46,8 +49,16 @@ function ArgusApp() {
     ? Object.keys(scan.data.layer_errors)
     : null
 
+  if (!booted) {
+    return <BootSequence onDone={() => { sessionStorage.setItem("argus_booted", "1"); setBooted(true) }} />
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg)" }}>
+      {/* Cinematic atmosphere */}
+      <div className="crt-overlay" />
+      <div className="uplink-sheen" />
+
       {/* Classification banner */}
       <div
         className="mono"
@@ -118,6 +129,7 @@ function ArgusApp() {
             drawMode={drawMode}
             onDrawComplete={handleDrawComplete}
           />
+          <ScanOverlay active={scan.isPending} />
         </div>
 
         <RightPanel
