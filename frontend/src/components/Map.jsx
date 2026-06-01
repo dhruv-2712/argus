@@ -8,9 +8,31 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
   const mapInstance = useRef(null)
   const markersRef = useRef([])
   const fittedRef = useRef(false)
+  const aoisRef = useRef([])
+  const selectedAOIRef = useRef(null)
   const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true })
   const [cursor, setCursor] = useState(null)
   const [zoom, setZoom] = useState(3)
+
+  const paintAOIBoxes = (map) => {
+    const src = map.getSource("aoi-boxes")
+    if (!src) return
+    const selId = selectedAOIRef.current?.id
+    const features = aoisRef.current.map(a => {
+      const selected = a.id === selId
+      return {
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [[[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[1]], [a.bbox[2], a.bbox[3]], [a.bbox[0], a.bbox[3]], [a.bbox[0], a.bbox[1]]]] },
+        properties: {
+          lineColor: selected ? "#ffffff" : (a.active ? "#36dceb" : "#3a4a57"),
+          fillColor: selected ? "#ffffff" : (a.active ? "#36dceb" : "#3a4a57"),
+          lineWidth: selected ? 2.5 : 1.5,
+          fillOpacity: selected ? 0.18 : 0.07,
+        }
+      }
+    })
+    src.setData({ type: "FeatureCollection", features })
+  }
 
   useEffect(() => {
     if (mapInstance.current) return
@@ -44,8 +66,9 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
 
     map.on("load", () => {
       map.addSource("aoi-boxes", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
-      map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-boxes", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": 0.1 } })
-      map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-boxes", paint: { "line-color": ["get", "lineColor"], "line-width": 2 } })
+      map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-boxes", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } })
+      map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-boxes", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } })
+      paintAOIBoxes(map)
     })
 
     map.on("mousemove", (e) => setCursor([e.lngLat.lng, e.lngLat.lat]))
@@ -57,28 +80,24 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, onCo
   // Update AOI boxes + auto-fit on first load
   useEffect(() => {
     const map = mapInstance.current
-    if (!map || !map.isStyleLoaded()) return
     const list = aois || []
-    const features = list.map(a => ({
-      type: "Feature",
-      geometry: { type: "Polygon", coordinates: [[[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[1]], [a.bbox[2], a.bbox[3]], [a.bbox[0], a.bbox[3]], [a.bbox[0], a.bbox[1]]]] },
-      properties: { lineColor: a.active ? "#36dceb" : "#3a4a57", fillColor: a.active ? "#36dceb" : "#3a4a57" }
-    }))
-    const src = map.getSource("aoi-boxes")
-    if (src) src.setData({ type: "FeatureCollection", features })
+    aoisRef.current = list
+    if (map && map.isStyleLoaded()) paintAOIBoxes(map)
 
-    // Fit map to show all AOIs on first load
     if (!fittedRef.current && list.length > 0) {
       fittedRef.current = true
       const lons = list.flatMap(a => [a.bbox[0], a.bbox[2]])
       const lats = list.flatMap(a => [a.bbox[1], a.bbox[3]])
-      const bounds = [
-        [Math.min(...lons), Math.min(...lats)],
-        [Math.max(...lons), Math.max(...lats)],
-      ]
-      map.fitBounds(bounds, { padding: 60, maxZoom: 6, duration: 1200 })
+      map?.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 6, duration: 1200 })
     }
   }, [aois])
+
+  // Repaint boxes when selected AOI changes (highlight)
+  useEffect(() => {
+    selectedAOIRef.current = selectedAOI || null
+    const map = mapInstance.current
+    if (map && map.isStyleLoaded()) paintAOIBoxes(map)
+  }, [selectedAOI])
 
   // Update contact markers
   useEffect(() => {
