@@ -7,9 +7,10 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
+  const fittedRef = useRef(false)
   const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true })
   const [cursor, setCursor] = useState(null)
-  const [zoom, setZoom] = useState(5)
+  const [zoom, setZoom] = useState(3)
 
   useEffect(() => {
     if (mapInstance.current) return
@@ -35,8 +36,8 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
           { id: "labels", type: "raster", source: "esri-labels", paint: { "raster-opacity": 0.7 } },
         ],
       },
-      center: [80.2, 34.5],
-      zoom: 8,
+      center: [75, 25],
+      zoom: 3,
     })
     map.addControl(new maplibregl.NavigationControl(), "top-left")
     mapInstance.current = map
@@ -53,17 +54,30 @@ export default function Map({ aois, contacts, selectedAOI, onContactClick, drawM
     return () => { map.remove(); mapInstance.current = null }
   }, [])
 
-  // Update AOI boxes
+  // Update AOI boxes + auto-fit on first load
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !map.isStyleLoaded()) return
-    const features = (aois || []).map(a => ({
+    const list = aois || []
+    const features = list.map(a => ({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: [[[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[1]], [a.bbox[2], a.bbox[3]], [a.bbox[0], a.bbox[3]], [a.bbox[0], a.bbox[1]]]] },
       properties: { lineColor: a.active ? "#36dceb" : "#3a4a57", fillColor: a.active ? "#36dceb" : "#3a4a57" }
     }))
     const src = map.getSource("aoi-boxes")
     if (src) src.setData({ type: "FeatureCollection", features })
+
+    // Fit map to show all AOIs on first load
+    if (!fittedRef.current && list.length > 0) {
+      fittedRef.current = true
+      const lons = list.flatMap(a => [a.bbox[0], a.bbox[2]])
+      const lats = list.flatMap(a => [a.bbox[1], a.bbox[3]])
+      const bounds = [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ]
+      map.fitBounds(bounds, { padding: 60, maxZoom: 6, duration: 1200 })
+    }
   }, [aois])
 
   // Update contact markers
