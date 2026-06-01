@@ -65,6 +65,21 @@ async def scan_aoi(
             detail={"scan_failed": True, "errors": result["layer_errors"]},
         )
 
+    # Push a live event to all connected operators.
+    from api.routes.ws import broadcast
+    await broadcast({
+        "type": "scan_complete",
+        "aoi_id": aoi.id,
+        "aoi_name": aoi.name,
+        "fused_count": len(fused),
+        "max_threat": max(
+            (fc.threat_level for fc in fused),
+            key=lambda t: {"critical": 3, "high": 2, "medium": 1, "low": 0}.get(t, 0),
+            default="low",
+        ) if fused else "low",
+        "has_critical": any(fc.threat_level == "critical" for fc in fused),
+    })
+
     return {
         "aoi_id": aoi.id,
         "scan_timestamp": datetime.now(timezone.utc).isoformat(),

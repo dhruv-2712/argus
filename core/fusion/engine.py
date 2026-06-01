@@ -35,6 +35,62 @@ def assign_threat_level(confidence: float) -> str:
     return "low"
 
 
+def corroboration_multiplier(n_sources: int) -> float:
+    """Confidence multiplier keyed on number of distinct corroborating sources."""
+    if n_sources <= 1:
+        return 0.6
+    if n_sources == 2:
+        return 1.3
+    return 1.6
+
+
+def explain_confidence(raw_contacts: list[dict]) -> dict:
+    """Reconstruct the fusion confidence math as a human-readable breakdown.
+
+    Each raw contact dict must carry ``source`` and ``confidence``. Returns the
+    weighted base confidence, the per-source contributions, the corroboration
+    multiplier applied, and the resulting score — so the UI can show operators
+    exactly *why* a contact scored the way it did.
+    """
+    if not raw_contacts:
+        return {"steps": [], "final": 0.0}
+
+    contributions = []
+    total_w = 0.0
+    weighted = 0.0
+    for c in raw_contacts:
+        src = c.get("source", "unknown")
+        conf = float(c.get("confidence", 0.0))
+        w = SOURCE_RELIABILITY.get(src, 0.8)
+        total_w += w
+        weighted += conf * w
+        contributions.append({
+            "source": src,
+            "confidence": round(conf, 3),
+            "reliability": w,
+            "weighted": round(conf * w, 3),
+        })
+
+    base = weighted / total_w if total_w else 0.0
+    distinct = len({c.get("source") for c in raw_contacts})
+    mult = corroboration_multiplier(distinct)
+    final = min(base * mult, 0.97) if distinct >= 2 else base * mult
+
+    return {
+        "contributions": contributions,
+        "weighted_base": round(base, 4),
+        "distinct_sources": distinct,
+        "corroboration_multiplier": mult,
+        "corroboration_label": (
+            "uncorroborated (single source)" if distinct <= 1
+            else f"{distinct}-source corroboration"
+        ),
+        "capped": distinct >= 2 and base * mult > 0.97,
+        "final": round(final, 4),
+        "threat_level": assign_threat_level(final),
+    }
+
+
 class FusionEngine:
     """Clusters geographically proximate contacts and applies corroboration scoring."""
 
@@ -127,14 +183,10 @@ class FusionEngine:
         if self._is_contradictory(cluster):
             return min(avg_conf, 0.4)
 
-        if n_sources == 1:
-            return avg_conf * 0.6
-
-        if n_sources == 2:
-            return min(avg_conf * 1.3, 0.97)
-
-        # 3+ sources
-        return min(avg_conf * 1.6, 0.97)
+        mult = corroboration_multiplier(n_sources)
+        if n_sources <= 1:
+            return avg_conf * mult
+        return min(avg_conf * mult, 0.97)
 
     def _weighted_confidence(self, cluster: list[Contact]) -> float:
         """Reliability-weighted mean of constituent confidences."""

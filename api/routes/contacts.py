@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.fusion.engine import explain_confidence
 from db.database import ContactRow, FusedContactRow, async_session
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -110,7 +111,9 @@ async def get_contact(contact_id: str) -> dict:
             if raw_row:
                 raw_rows.append(raw_row)
 
-    fused["raw_contacts"] = [_contact_row_to_dict(r) for r in raw_rows]
+    raw_dicts = [_contact_row_to_dict(r) for r in raw_rows]
+    fused["raw_contacts"] = raw_dicts
+    fused["confidence_breakdown"] = explain_confidence(raw_dicts)
     return fused
 
 

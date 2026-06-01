@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
-from api.routes import aoi, contacts, intel, monitor, reports
+from api.routes import aoi, contacts, intel, monitor, reports, ws
 from db.database import AOIRow, async_session, init_db
 
 logging.basicConfig(
@@ -85,6 +85,7 @@ app.include_router(contacts.router)
 app.include_router(monitor.router)
 app.include_router(reports.router)
 app.include_router(intel.router)
+app.include_router(ws.router)
 
 
 @app.get("/health")
