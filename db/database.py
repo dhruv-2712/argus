@@ -18,7 +18,9 @@ from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).resolve().parent.parent / "argus.db"
+import os as _os
+_DATA_DIR = _os.getenv("DATA_DIR", str(Path(__file__).resolve().parent.parent))
+DB_PATH = Path(_DATA_DIR) / "argus.db"
 DATABASE_URL = f"sqlite+aiosqlite:///{DB_PATH}"
 
 engine = create_async_engine(DATABASE_URL, echo=False)

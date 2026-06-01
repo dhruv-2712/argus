@@ -1,0 +1,30 @@
+# Fly.io deployment configuration for ARGUS backend.
+# Run `fly launch` on first deploy — it will set the app name and create the volume.
+
+app = "argus-api"
+primary_region = "sin"  # Singapore; change to "bom" (Mumbai) or "lax" etc. if preferred
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  DATA_DIR = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true   # scale to zero when idle (free tier friendly)
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "20s"
+    method = "GET"
+    path = "/health"
+    timeout = "10s"
+
+[[mounts]]
+  source = "argus_data"
+  destination = "/data"
