@@ -10,15 +10,37 @@ import ScanOverlay from "./components/ScanOverlay"
 import CommandPalette from "./components/CommandPalette"
 import TimelineScrubber from "./components/TimelineScrubber"
 import ErrorBoundary from "./components/ErrorBoundary"
+import MapLoader from "./components/MapLoader"
 import { useAOIs, useContacts, useScan, useTerrain } from "./hooks/useArgusData"
 import { useLiveFeed } from "./hooks/useLiveFeed"
 import { scanStart, bootHum } from "./lib/sound"
 
 // Code-split the heavy map bundle (MapLibre) so first paint is fast.
-// importMap is reused to PRELOAD the chunk during the boot sequence, so the
-// Suspense fallback doesn't stall after boot finishes.
+// importMap is reused to PRELOAD the chunk during the boot sequence.
 const importMap = () => import("./components/Map")
-const Map = lazy(importMap)
+
+// Retry the chunk load before giving up. A rejected lazy import (e.g. a stale
+// chunk 404 after a redeploy) would otherwise surface as a "display fault".
+// On the final miss we reload ONCE to pull a fresh index.html with valid hashes.
+function lazyWithRetry(factory, retries = 3, delay = 400) {
+  return lazy(() => new Promise((resolve, reject) => {
+    const attempt = (n) => {
+      factory().then(resolve).catch((err) => {
+        if (n > 0) { setTimeout(() => attempt(n - 1), delay); return }
+        const KEY = "argus_chunk_reload"
+        if (!sessionStorage.getItem(KEY)) {
+          sessionStorage.setItem(KEY, "1")
+          window.location.reload()
+          return
+        }
+        reject(err)
+      })
+    }
+    attempt(retries)
+  }))
+}
+
+const Map = lazyWithRetry(importMap)
 
 const qc = new QueryClient()
 
@@ -182,7 +204,7 @@ function ArgusApp() {
           </div>
 
           <ErrorBoundary label="The tactical map failed to initialize.">
-            <Suspense fallback={<div className="mono" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent)", letterSpacing: "0.2em", fontSize: 12 }}>INITIALIZING TACTICAL DISPLAY…</div>}>
+            <Suspense fallback={<MapLoader />}>
               <Map
                 aois={aois}
                 contacts={contacts}
