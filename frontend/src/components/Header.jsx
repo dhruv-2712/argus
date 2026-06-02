@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Crosshair, Scan, ChevronDown } from "lucide-react"
+import { Scan, ChevronDown } from "lucide-react"
 
 function useUtcClock() {
   const [now, setNow] = useState(() => new Date())
@@ -30,22 +30,13 @@ export default function Header({ aois, selectedAOI, onSelectAOI, onScan, scannin
     >
       <div className="scanbar" style={{ opacity: scanning ? 1 : 0 }} />
 
-      {/* Reticle + wordmark */}
+      {/* Wordmark (text only) */}
       <div className="flex items-center" style={{ gap: 11 }}>
-        <div
-          className="flex items-center justify-center"
-          style={{
-            width: 34, height: 34, border: "1px solid var(--accent)",
-            color: "var(--accent)", background: "var(--accent-dim)",
-            boxShadow: "0 0 12px var(--accent-glow), inset 0 0 8px rgba(54,220,235,0.1)",
-          }}
-        >
-          <Crosshair size={20} />
-        </div>
+        <div style={{ width: 3, height: 30, background: "var(--accent)", boxShadow: "0 0 10px var(--accent-glow)" }} />
         <div style={{ lineHeight: 1.1 }}>
           <div
             className="mono glow-text"
-            style={{ fontSize: 19, fontWeight: 700, letterSpacing: "0.32em", color: "var(--text-bright)" }}
+            style={{ fontSize: 21, fontWeight: 700, letterSpacing: "0.34em", color: "var(--text-bright)" }}
           >
             ARGUS
           </div>

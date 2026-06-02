@@ -9,12 +9,16 @@ import BootSequence from "./components/BootSequence"
 import ScanOverlay from "./components/ScanOverlay"
 import CommandPalette from "./components/CommandPalette"
 import TimelineScrubber from "./components/TimelineScrubber"
+import ErrorBoundary from "./components/ErrorBoundary"
 import { useAOIs, useContacts, useScan, useTerrain } from "./hooks/useArgusData"
 import { useLiveFeed } from "./hooks/useLiveFeed"
 import { scanStart, bootHum } from "./lib/sound"
 
 // Code-split the heavy map bundle (MapLibre) so first paint is fast.
-const Map = lazy(() => import("./components/Map"))
+// importMap is reused to PRELOAD the chunk during the boot sequence, so the
+// Suspense fallback doesn't stall after boot finishes.
+const importMap = () => import("./components/Map")
+const Map = lazy(importMap)
 
 const qc = new QueryClient()
 
@@ -37,6 +41,10 @@ function ArgusApp() {
   useEffect(() => {
     setContactFilters(selectedAOI ? { aoi_id: selectedAOI.id } : {})
   }, [selectedAOI])
+
+  // Preload the MapLibre chunk immediately (while the boot sequence plays),
+  // so by the time the app renders the map the chunk is already cached.
+  useEffect(() => { importMap() }, [])
 
   const handleScan = async (id) => {
     setScanError(null)
@@ -173,18 +181,20 @@ function ArgusApp() {
             {liveConnected ? "LIVE FEED" : "OFFLINE"}
           </div>
 
-          <Suspense fallback={<div className="mono" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent)", letterSpacing: "0.2em", fontSize: 12 }}>INITIALIZING TACTICAL DISPLAY…</div>}>
-            <Map
-              aois={aois}
-              contacts={contacts}
-              selectedAOI={selectedAOI}
-              selectedContact={selectedContact}
-              terrain={terrain}
-              onContactClick={setSelectedContact}
-              drawMode={drawMode}
-              onDrawComplete={handleDrawComplete}
-            />
-          </Suspense>
+          <ErrorBoundary label="The tactical map failed to initialize.">
+            <Suspense fallback={<div className="mono" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent)", letterSpacing: "0.2em", fontSize: 12 }}>INITIALIZING TACTICAL DISPLAY…</div>}>
+              <Map
+                aois={aois}
+                contacts={contacts}
+                selectedAOI={selectedAOI}
+                selectedContact={selectedContact}
+                terrain={terrain}
+                onContactClick={setSelectedContact}
+                drawMode={drawMode}
+                onDrawComplete={handleDrawComplete}
+              />
+            </Suspense>
+          </ErrorBoundary>
           <ScanOverlay active={scan.isPending} />
 
           {showTimeline && selectedAOI && (
@@ -235,8 +245,10 @@ function AlertStrip({ kind, icon, children }) {
 
 export default function App() {
   return (
-    <QueryClientProvider client={qc}>
-      <ArgusApp />
-    </QueryClientProvider>
+    <ErrorBoundary label="The console encountered an unexpected fault.">
+      <QueryClientProvider client={qc}>
+        <ArgusApp />
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

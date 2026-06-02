@@ -36,8 +36,9 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
   const selectedAOIRef = useRef(null)
   const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true, thermal: true, flights: true })
   const [cursor, setCursor] = useState(null)
-  const [zoom, setZoom] = useState(3)
-  const [zoomLevel, setZoomLevel] = useState(3)
+  const [zoom, setZoom] = useState(2.2)
+  const [zoomLevel, setZoomLevel] = useState(2)
+  const [imageryReady, setImageryReady] = useState(false)
 
   const paintAOIBoxes = (map) => {
     const src = map.getSource("aoi-boxes")
@@ -79,15 +80,32 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
           },
         },
         layers: [
-          { id: "satellite", type: "raster", source: "esri-satellite" },
-          { id: "labels", type: "raster", source: "esri-labels", paint: { "raster-opacity": 0.7 } },
+          // 600ms raster fade makes the blur->sharp tile transition visible as
+          // you zoom in (progressive detail), instead of a hard pop.
+          { id: "satellite", type: "raster", source: "esri-satellite", paint: { "raster-fade-duration": 600 } },
+          { id: "labels", type: "raster", source: "esri-labels", paint: { "raster-opacity": 0.7, "raster-fade-duration": 600 } },
         ],
       },
+      // Start zoomed WAY out: a handful of low-z tiles paint near-instantly
+      // (no blank), then we ease into the theater so detail streams in.
       center: [75, 25],
-      zoom: 3,
+      zoom: 2.2,
+      minZoom: 1.6,            // prevent zooming out past a single world
+      renderWorldCopies: false, // stop the map tiling/looping horizontally
+      fadeDuration: 200,
     })
     map.addControl(new maplibregl.NavigationControl(), "top-left")
     mapInstance.current = map
+
+    // MapLibre can paint blank if it mounts (via lazy/Suspense) before its
+    // container has dimensions. Force a resize once it's in the DOM.
+    map.on("load", () => map.resize())
+    const ro = new ResizeObserver(() => map.resize())
+    ro.observe(mapRef.current)
+    setTimeout(() => map.resize(), 60)
+
+    // First successful tile paint → drop the "acquiring imagery" overlay.
+    map.once("idle", () => setImageryReady(true))
 
     map.on("load", () => {
       map.addSource("aoi-boxes", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
@@ -145,7 +163,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
       setZoomLevel((prev) => (Math.round(z) !== prev ? Math.round(z) : prev))
     })
 
-    return () => { map.remove(); mapInstance.current = null }
+    return () => { ro.disconnect(); map.remove(); mapInstance.current = null }
   }, [])
 
   // Update AOI boxes + auto-fit on first load
@@ -155,11 +173,16 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
     aoisRef.current = list
     if (map && map.isStyleLoaded()) paintAOIBoxes(map)
 
-    if (!fittedRef.current && list.length > 0) {
+    if (!fittedRef.current && list.length > 0 && map) {
       fittedRef.current = true
       const lons = list.flatMap(a => [a.bbox[0], a.bbox[2]])
       const lats = list.flatMap(a => [a.bbox[1], a.bbox[3]])
-      map?.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 6, duration: 1200 })
+      const bounds = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]
+      // Let the low-zoom overview paint first, THEN push into the theater with
+      // a long ease so higher-detail tiles stream in progressively.
+      const flyIn = () => map.fitBounds(bounds, { padding: 60, maxZoom: 6, duration: 2200 })
+      if (imageryReady) setTimeout(flyIn, 250)
+      else map.once("idle", () => setTimeout(flyIn, 250))
     }
   }, [aois])
 
@@ -350,12 +373,46 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
     return () => map.off("click", onClick)
   }, [drawMode])
 
+  // Snap the camera back to the current focus (contact > AOI > whole theater).
+  const recenter = () => {
+    const map = mapInstance.current
+    if (!map) return
+    if (selectedContact) {
+      map.flyTo({ center: [selectedContact.lon, selectedContact.lat], zoom: 11, duration: 900 })
+    } else if (selectedAOI) {
+      const [minLon, minLat, maxLon, maxLat] = selectedAOI.bbox
+      map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 80, maxZoom: 10, duration: 900 })
+    } else if (aoisRef.current.length > 0) {
+      const lons = aoisRef.current.flatMap(a => [a.bbox[0], a.bbox[2]])
+      const lats = aoisRef.current.flatMap(a => [a.bbox[1], a.bbox[3]])
+      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 6, duration: 900 })
+    }
+  }
+
+  const focusLabel = selectedContact ? "CONTACT" : selectedAOI ? selectedAOI.name.toUpperCase() : "THEATER"
+
   const sourceEntries = Object.entries(SOURCE_COLORS)
   const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#04080c" }}>
       <div ref={mapRef} style={{ position: "absolute", inset: 0 }} />
+
+      {/* Acquiring-imagery overlay — covers the brief pre-tile gap so the user
+          never sees a blank dark screen; fades out on first tile paint. */}
+      {!imageryReady && (
+        <div
+          className="mono"
+          style={{
+            position: "absolute", inset: 0, zIndex: 8, pointerEvents: "none",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+            background: "radial-gradient(circle at 50% 45%, #0a1622 0%, #04080c 70%)",
+          }}
+        >
+          <span style={{ display: "inline-block", width: 26, height: 26, border: "2px solid rgba(54,220,235,0.25)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
+          <div style={{ color: "var(--accent)", fontSize: 11, letterSpacing: "0.24em" }}>ACQUIRING SATELLITE IMAGERY</div>
+        </div>
+      )}
 
       {/* Screen FX + frame + war-room grid/reticle */}
       <div className="tac-grid" />
@@ -430,6 +487,26 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
           </div>
         ))}
       </div>
+
+      {/* Recenter to focus (bottom-left, above the cursor readout) */}
+      <button
+        onClick={recenter}
+        className="mono"
+        title={`Recenter on ${focusLabel}`}
+        style={{
+          position: "absolute", bottom: 70, left: 14, zIndex: 7,
+          display: "flex", alignItems: "center", gap: 7,
+          background: "rgba(7,11,16,0.9)", border: "1px solid var(--accent)",
+          color: "var(--accent)", padding: "7px 12px", cursor: "pointer",
+          fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em",
+          boxShadow: "0 0 10px rgba(54,220,235,0.2)", backdropFilter: "blur(4px)",
+        }}
+      >
+        <span style={{ fontSize: 13, lineHeight: 1 }}>◎</span> RECENTER
+        <span style={{ color: "var(--dim)", fontWeight: 400, letterSpacing: "0.08em", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {focusLabel}
+        </span>
+      </button>
 
       {/* Cursor + zoom readout (bottom-left) */}
       <div
