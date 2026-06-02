@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green) ![LangGraph](https://img.shields.io/badge/LangGraph-0.2-purple) ![React](https://img.shields.io/badge/React-18-61dafb) ![License](https://img.shields.io/badge/license-MIT-orange)
 
-ARGUS fuses Sentinel-2 optical imagery, Sentinel-1 SAR, AIS maritime vessel tracks, and GDELT/ACLED conflict events into confidence-scored intelligence contacts. A LangGraph OCOKA pipeline (**SPECTER**) runs terrain analysis on high-confidence detections, and the system auto-generates PDF intelligence briefs. A React + MapLibre command-and-control UI renders everything on a live satellite map.
+ARGUS fuses **six** open-source intelligence streams — Sentinel-2 optical imagery, Sentinel-1 SAR, AIS maritime vessel tracks, GDELT/ACLED conflict events, NASA FIRMS thermal anomalies, and OpenSky live aircraft tracks — into confidence-scored intelligence contacts using **Dempster-Shafer evidence fusion**. A LangGraph OCOKA pipeline (**SPECTER**) runs terrain analysis on high-confidence detections, an autonomous scheduler re-scans every active area on its revisit cadence, and the system auto-generates PDF intelligence briefs. A React + MapLibre command-and-control UI renders everything on a live satellite map.
 
 ![ARGUS Demo](docs/demo.gif)
 
@@ -47,18 +47,27 @@ Output PDF: `reports/galwan_2020_demo.pdf`
 ## Architecture
 
 ```
-Data Sources          Ingestion             Detection            Fusion          Output
------------           ---------             ---------            ------          ------
-Sentinel-2 L2A  -->  optical/ingest.py  --> optical/detect.py  \
-Sentinel-1 GRD  -->  sar/ingest.py      --> sar/detect.py        --> FusionEngine --> SPECTER --> PDF
-GDELT / ACLED   -->  events/ingest.py   --> events/detect.py    /     (OCOKA)       --> API
-AIS vessels     -->  maritime/ingest.py --> maritime/detect.py /                    --> MapLibre UI
+Data Sources           Ingestion              Detection             Fusion          Output
+-----------            ---------              ---------             ------          ------
+Sentinel-2 L2A   -->  optical/ingest.py  --> optical/detect.py  \
+Sentinel-1 GRD   -->  sar/ingest.py      --> sar/detect.py       \
+GDELT / ACLED    -->  events/ingest.py   --> events/detect.py     --> FusionEngine --> SPECTER --> PDF
+AIS vessels      -->  maritime/ingest.py --> maritime/detect.py   /   (DS + corrob)  (OCOKA)   --> API
+NASA FIRMS       -->  thermal/ingest.py  --> thermal/detect.py   /                             --> MapLibre UI
+OpenSky ADS-B    -->  flights/ingest.py  --> flights/detect.py  /
 
 Fusion rules:
-  1 source x0.6 | 2 sources x1.3 | 3+ x1.6 | cap 0.97
+  Single-source:  weighted-mean x0.6  (uncorroborated penalty)
+  Multi-source:   Dempster-Shafer evidence combination (40%) blended with
+                  corroboration multiplier (60%): 2 src x1.3 | 3+ x1.6 | cap 0.97
   Contradiction (different types, >48h span): cap 0.4
+  Source reliability: SAR 1.0 | optical 0.95 | maritime 0.90 | thermal 0.85 | flights 0.80 | events 0.70
   Threat: <0.35 low | 0.35-0.6 medium | 0.6-0.85 high | >0.85 critical
 ```
+
+An hourly **autonomous scheduler** (APScheduler) re-scans every active AOI once
+its `revisit_hours` window lapses, pushing results to connected operators over
+WebSocket. Multi-worker deployments fan out live events via optional Redis pub/sub.
 
 ---
 
@@ -70,6 +79,8 @@ Fusion rules:
 | SAR | Sentinel-1 GRD via Planetary Computer (free) | Surface disturbance, construction (amplitude correlation) | ~6 days |
 | Events | GDELT (free) + ACLED (free academic) | Military activity, conflict events from news & structured data | Near real-time |
 | Maritime | AISHub (free tier) | Loitering, formation sailing, dark (AIS-gap) vessels | ~30 min |
+| Thermal | NASA FIRMS VIIRS (free key) | Weapons fire, burn-off, convoy heat (brightness-temp + FRP scoring) | ~3–6 hrs |
+| Flights | OpenSky Network (free, no key) | Military callsigns, ISR loiter profiles, emergency squawks | Near real-time |
 
 ---
 
@@ -175,7 +186,8 @@ curl http://localhost:8002/reports/{report_id}/pdf -o report.pdf
 Dark military C2 / Palantir-Gotham aesthetic on a live ESRI satellite basemap:
 - Diamond contact markers colored by threat, sized by confidence (critical pulses)
 - Cyan AOI bounding boxes, click-to-plot draw mode
-- Sensor-feed toggles (EO / SAR / SIGINT / AIS), live cursor LAT/LON/ZOOM readout
+- Sensor-feed toggles (EO / SAR / SIGINT / AIS / THRM / FLGT), live cursor LAT/LON/ZOOM readout
+- Contact-density heatmap at low zoom; escalation rings + directional trajectory vectors
 - Right panel: Contacts (threat + sensor filters), Areas, Status (threat donut + PDF report)
 - SPECTER terrain dossier with collapsible OCOKA factors
 
@@ -190,6 +202,8 @@ Dark military C2 / Palantir-Gotham aesthetic on a live ESRI satellite basemap:
 | GDELT | gdeltproject.org | None |
 | ACLED | acleddata.com | Free academic key |
 | AISHub | aishub.net | Free username |
+| NASA FIRMS | firms.modaps.eosdis.nasa.gov | Free MAP_KEY (`FIRMS_MAP_KEY`) |
+| OpenSky Network | opensky-network.org | None |
 | Open-Elevation | api.open-elevation.com | None |
 | ESRI World Imagery (basemap) | arcgisonline.com | None |
 
@@ -203,20 +217,27 @@ ARGUS uses exclusively open-source, publicly available data. No classified data 
 
 ## Testing
 
-The fusion engine — the core of ARGUS — is covered by a pytest suite that
-locks in the corroboration contract (single-source penalty, multi-source
-boost + cap, contradiction suppression, reliability weighting, score
-explainability):
+A **57-test** pytest suite covers the intelligence core:
+
+- **Fusion engine** — single-source penalty, multi-source boost + cap, contradiction suppression, reliability weighting, score explainability
+- **Dempster-Shafer** — BPA normalisation, agreement amplification, conflict handling, total-conflict fallback
+- **Thermal layer** — brightness/FRP/day-night scoring, weak-signal filtering, no-key degradation
+- **Flights layer** — military-callsign / ISR-profile / squawk classification, on-ground filtering, rate-limit degradation
+- **Terrain geometry** — commanding-height selection, low-ground approaches, observation-radius scaling
 
 ```bash
 pip install -r requirements.txt
-pytest -q
+pytest -q          # 57 passed
 ```
+
+CI (`.github/workflows/ci.yml`) runs the full suite plus a production frontend
+build on every push to `main`.
 
 ## War-Room UX
 
 - **Cold-boot sequence** — cinematic POST log on launch (skippable)
 - **Live feed (WebSocket)** — contacts stream in the instant a scan resolves; audio cue on CRITICAL
+- **Autonomous scanning** — hourly scheduler re-scans active AOIs on their revisit cadence; results arrive as `AUTO` live-feed events
 - **Command palette** — `⌘K` / `Ctrl-K` to jump to any AOI, run a scan, or toggle audio
 - **Time machine** — scrub/replay how each AOI's tracks evolved across scans
 - **Confidence explainability** — every contact shows the exact fusion math ("why this score")
@@ -226,9 +247,12 @@ pytest -q
 
 ## Roadmap
 
-- Automated revisit scheduling (APScheduler)
+- ~~Automated revisit scheduling (APScheduler)~~ ✅ shipped
+- ~~Dempster-Shafer evidence fusion~~ ✅ shipped
+- ~~Thermal (FIRMS) + flight (OpenSky) layers~~ ✅ shipped
 - GeoJSON / KML export
 - True SLC coherence SAR via ASF Vertex
+- PostGIS spatial backend (`ST_Contains` / `ST_DWithin`)
 - Per-user AOI workspaces
 
 ---
