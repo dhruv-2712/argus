@@ -26,7 +26,7 @@ function lineRing(lat, lon, radiusKm, color, steps = 48) {
   return { type: "Feature", properties: { color }, geometry: { type: "LineString", coordinates: coords } }
 }
 
-export default function Map({ aois, contacts, selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete }) {
+export default function Map({ aois, contacts, selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete, isMobile }) {
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
@@ -428,7 +428,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
         className="mono"
         style={{
           position: "absolute", top: 14, left: 14, zIndex: 6, pointerEvents: "none",
-          display: "flex", alignItems: "center", gap: 8,
+          display: isMobile ? "none" : "flex", alignItems: "center", gap: 8,
           background: "rgba(7,11,16,0.78)", border: "1px solid var(--line)", padding: "5px 10px",
           fontSize: 10, letterSpacing: "0.14em", color: "var(--text)",
         }}
@@ -445,8 +445,8 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
           background: "rgba(7,11,16,0.88)", border: "1px solid var(--line)", padding: "9px 11px",
         }}
       >
-        <div className="label" style={{ marginBottom: 7 }}>Sensor Feeds</div>
-        <div style={{ display: "flex", gap: 6 }}>
+        {!isMobile && <div className="label" style={{ marginBottom: 7 }}>Sensor Feeds</div>}
+        <div style={{ display: "flex", gap: isMobile ? 4 : 6, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           {sourceEntries.map(([src, color]) => {
             const on = activeSources[src] !== false
             return (
@@ -457,7 +457,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
                 style={{
                   background: on ? `${color}1f` : "transparent",
                   border: `1px solid ${on ? color : "var(--line)"}`,
-                  borderRadius: 0, padding: "4px 9px", fontSize: 10,
+                  borderRadius: 0, padding: isMobile ? "3px 6px" : "4px 9px", fontSize: isMobile ? 9 : 10,
                   color: on ? color : "var(--dim)", cursor: "pointer",
                   fontWeight: 700, letterSpacing: "0.08em",
                   boxShadow: on ? `0 0 8px ${color}40` : "none", transition: "all 0.15s",
@@ -471,22 +471,24 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
         </div>
       </div>
 
-      {/* Threat legend (bottom-right) */}
-      <div
-        className="mono"
-        style={{
-          position: "absolute", bottom: 26, right: 14, zIndex: 6, pointerEvents: "none",
-          background: "rgba(7,11,16,0.82)", border: "1px solid var(--line)", padding: "8px 11px",
-        }}
-      >
-        <div className="label" style={{ marginBottom: 6 }}>Threat Level</div>
-        {THREAT_ORDER.map(t => (
-          <div key={t} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
-            <span style={{ width: 8, height: 8, background: THREAT_COLORS[t], transform: "rotate(45deg)", boxShadow: `0 0 5px ${THREAT_COLORS[t]}` }} />
-            <span style={{ fontSize: 9.5, letterSpacing: "0.1em", color: "var(--text)" }}>{t.toUpperCase()}</span>
-          </div>
-        ))}
-      </div>
+      {/* Threat legend (bottom-right, desktop only) */}
+      {!isMobile && (
+        <div
+          className="mono"
+          style={{
+            position: "absolute", bottom: 26, right: 14, zIndex: 6, pointerEvents: "none",
+            background: "rgba(7,11,16,0.82)", border: "1px solid var(--line)", padding: "8px 11px",
+          }}
+        >
+          <div className="label" style={{ marginBottom: 6 }}>Threat Level</div>
+          {THREAT_ORDER.map(t => (
+            <div key={t} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+              <span style={{ width: 8, height: 8, background: THREAT_COLORS[t], transform: "rotate(45deg)", boxShadow: `0 0 5px ${THREAT_COLORS[t]}` }} />
+              <span style={{ fontSize: 9.5, letterSpacing: "0.1em", color: "var(--text)" }}>{t.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Recenter to focus (bottom-left, above the cursor readout) */}
       <button
@@ -494,7 +496,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
         className="mono"
         title={`Recenter on ${focusLabel}`}
         style={{
-          position: "absolute", bottom: 70, left: 14, zIndex: 7,
+          position: "absolute", bottom: isMobile ? 24 : 70, left: 14, zIndex: 7,
           display: "flex", alignItems: "center", gap: 7,
           background: "rgba(7,11,16,0.9)", border: "1px solid var(--accent)",
           color: "var(--accent)", padding: "7px 12px", cursor: "pointer",
@@ -514,7 +516,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
         style={{
           position: "absolute", bottom: 26, left: 14, zIndex: 6, pointerEvents: "none",
           background: "rgba(7,11,16,0.82)", border: "1px solid var(--line)", padding: "7px 11px",
-          fontSize: 10.5, letterSpacing: "0.06em", color: "var(--accent)", display: "flex", gap: 14,
+          fontSize: 10.5, letterSpacing: "0.06em", color: "var(--accent)", display: isMobile ? "none" : "flex", gap: 14,
         }}
       >
         <span>

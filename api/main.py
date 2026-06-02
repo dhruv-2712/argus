@@ -34,6 +34,10 @@ _SEED_AOIS = [
     {"name": "Donbas Front",            "bbox": [ 37.0, 47.5,  39.5, 49.0], "domain": "land"},
     {"name": "Gaza Strip",              "bbox": [ 34.2, 31.2,  34.6, 31.6], "domain": "land"},
     {"name": "Gulf of Aden",            "bbox": [ 44.0, 11.0,  51.0, 15.0], "domain": "maritime"},
+    {"name": "Java Volcanic Arc",       "bbox": [109.5, -8.0, 111.0, -7.0], "domain": "land"},
+    {"name": "Eastern DRC",             "bbox": [ 28.5, -3.0,  30.0, -1.0], "domain": "land"},
+    {"name": "Red Sea — Bab el-Mandeb", "bbox": [ 42.5, 12.0,  44.0, 14.0], "domain": "maritime"},
+    {"name": "Sudan — Khartoum",        "bbox": [ 32.0, 15.0,  33.5, 16.0], "domain": "land"},
 ]
 
 

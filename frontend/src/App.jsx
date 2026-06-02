@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { PenLine, X, AlertTriangle, CheckCircle2, History, Radio } from "lucide-react"
+import { PenLine, X, AlertTriangle, CheckCircle2, History, Radio, List } from "lucide-react"
 import Header from "./components/Header"
 import RightPanel from "./components/RightPanel"
 import CreateAOIModal from "./components/CreateAOIModal"
@@ -44,6 +44,17 @@ const Map = lazyWithRetry(importMap)
 
 const qc = new QueryClient()
 
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth <= bp)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${bp}px)`)
+    const h = (e) => setM(e.matches)
+    mq.addEventListener("change", h)
+    return () => mq.removeEventListener("change", h)
+  }, [bp])
+  return m
+}
+
 function ArgusApp() {
   const { data: aois = [] } = useAOIs()
   const [selectedAOI, setSelectedAOI] = useState(null)
@@ -59,6 +70,8 @@ function ArgusApp() {
   const [showModal, setShowModal] = useState(false)
   const [scanError, setScanError] = useState(null)
   const [showTimeline, setShowTimeline] = useState(false)
+  const isMobile = useIsMobile()
+  const [panelOpen, setPanelOpen] = useState(false)
 
   useEffect(() => {
     setContactFilters(selectedAOI ? { aoi_id: selectedAOI.id } : {})
@@ -95,7 +108,6 @@ function ArgusApp() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg)" }}>
-      {/* Cinematic atmosphere */}
       <div className="crt-overlay" />
       <div className="uplink-sheen" />
 
@@ -108,7 +120,7 @@ function ArgusApp() {
           fontSize: 9, letterSpacing: "0.28em", textTransform: "uppercase",
         }}
       >
-        Unclassified // Open-Source Intelligence // ARGUS C2 — For Research Use Only
+        {isMobile ? "UNCLASSIFIED // ARGUS C2" : "Unclassified // Open-Source Intelligence // ARGUS C2 — For Research Use Only"}
       </div>
 
       <Header
@@ -117,9 +129,10 @@ function ArgusApp() {
         onSelectAOI={setSelectedAOI}
         onScan={handleScan}
         scanning={scan.isPending}
+        isMobile={isMobile}
       />
 
-      <TheaterPosture aois={aois} onSelectAOI={setSelectedAOI} />
+      {!isMobile && <TheaterPosture aois={aois} onSelectAOI={setSelectedAOI} />}
 
       {/* Live-feed flash banner */}
       {lastEvent && Date.now() - lastEvent.at < 6000 && (
@@ -167,8 +180,8 @@ function ArgusApp() {
             {drawMode ? "Cancel Plot" : "Plot AO"}
           </button>
 
-          {/* Timeline toggle (only when an AOI is selected) */}
-          {selectedAOI && (
+          {/* Timeline toggle (desktop only) */}
+          {selectedAOI && !isMobile && (
             <button
               onClick={() => setShowTimeline((t) => !t)}
               className="mono"
@@ -188,20 +201,22 @@ function ArgusApp() {
             </button>
           )}
 
-          {/* Live feed status pill */}
-          <div
-            className="mono"
-            style={{
-              position: "absolute", top: 52, right: 14, zIndex: 10,
-              display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(7,11,16,0.88)", border: "1px solid var(--line)", padding: "5px 10px",
-              fontSize: 9.5, letterSpacing: "0.12em",
-              color: liveConnected ? "var(--green)" : "var(--dim)",
-            }}
-          >
-            <span className="status-dot" style={{ color: liveConnected ? "var(--green)" : "var(--dim)", background: liveConnected ? "var(--green)" : "var(--dim)" }} />
-            {liveConnected ? "LIVE FEED" : "OFFLINE"}
-          </div>
+          {/* Live feed status pill (desktop) */}
+          {!isMobile && (
+            <div
+              className="mono"
+              style={{
+                position: "absolute", top: 52, right: 14, zIndex: 10,
+                display: "flex", alignItems: "center", gap: 6,
+                background: "rgba(7,11,16,0.88)", border: "1px solid var(--line)", padding: "5px 10px",
+                fontSize: 9.5, letterSpacing: "0.12em",
+                color: liveConnected ? "var(--green)" : "var(--dim)",
+              }}
+            >
+              <span className="status-dot" style={{ color: liveConnected ? "var(--green)" : "var(--dim)", background: liveConnected ? "var(--green)" : "var(--dim)" }} />
+              {liveConnected ? "LIVE FEED" : "OFFLINE"}
+            </div>
+          )}
 
           <ErrorBoundary label="The tactical map failed to initialize.">
             <Suspense fallback={<MapLoader />}>
@@ -214,10 +229,29 @@ function ArgusApp() {
                 onContactClick={setSelectedContact}
                 drawMode={drawMode}
                 onDrawComplete={handleDrawComplete}
+                isMobile={isMobile}
               />
             </Suspense>
           </ErrorBoundary>
           <ScanOverlay active={scan.isPending} />
+
+          {/* Mobile: floating button to open the intel panel */}
+          {isMobile && (
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="mono"
+              style={{
+                position: "absolute", bottom: 24, right: 14, zIndex: 10,
+                background: "rgba(11,18,26,0.95)", border: "1px solid var(--accent)",
+                color: "var(--accent)", padding: "10px 16px", cursor: "pointer",
+                fontSize: 11, fontWeight: 700, letterSpacing: "0.12em",
+                display: "flex", alignItems: "center", gap: 7,
+                boxShadow: "0 0 14px var(--accent-glow)", backdropFilter: "blur(4px)",
+              }}
+            >
+              <List size={14} /> INTEL
+            </button>
+          )}
 
           {showTimeline && selectedAOI && (
             <TimelineScrubber
@@ -229,14 +263,17 @@ function ArgusApp() {
           )}
         </div>
 
-        <RightPanel
-          contacts={contacts}
-          aois={aois}
-          selectedAOI={selectedAOI}
-          onAOISelect={setSelectedAOI}
-          onContactSelect={setSelectedContact}
-          onCreateAOI={() => { setPendingBbox(null); setShowModal(true) }}
-        />
+        {/* Desktop: always-visible side panel */}
+        {!isMobile && (
+          <RightPanel
+            contacts={contacts}
+            aois={aois}
+            selectedAOI={selectedAOI}
+            onAOISelect={setSelectedAOI}
+            onContactSelect={setSelectedContact}
+            onCreateAOI={() => { setPendingBbox(null); setShowModal(true) }}
+          />
+        )}
       </div>
 
       {showModal && (
@@ -244,6 +281,25 @@ function ArgusApp() {
       )}
 
       <CommandPalette aois={aois} onSelectAOI={setSelectedAOI} onScan={handleScan} />
+
+      {/* Mobile: slide-over intel panel */}
+      {isMobile && panelOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
+          <div onClick={() => setPanelOpen(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
+          <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "88vw", maxWidth: 400, background: "var(--bg)", boxShadow: "-4px 0 24px rgba(0,0,0,0.6)" }}>
+            <RightPanel
+              contacts={contacts}
+              aois={aois}
+              selectedAOI={selectedAOI}
+              onAOISelect={setSelectedAOI}
+              onContactSelect={(c) => { setSelectedContact(c); setPanelOpen(false) }}
+              onCreateAOI={() => { setPendingBbox(null); setShowModal(true) }}
+              isMobile
+              onClose={() => setPanelOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

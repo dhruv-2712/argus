@@ -34,7 +34,16 @@ function TabButton({ active, onClick, icon, label, count }) {
   )
 }
 
-export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, onContactSelect, onCreateAOI }) {
+function MobileCloseBar({ onClose }) {
+  return (
+    <div className="mono flex items-center justify-between" style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", background: "#080d12", flexShrink: 0 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: "var(--text-bright)" }}>INTEL PANEL</span>
+      <button onClick={onClose} style={{ background: "none", border: "1px solid var(--line)", color: "var(--accent)", cursor: "pointer", padding: "4px 10px", fontSize: 11, letterSpacing: "0.1em" }} className="mono">CLOSE</button>
+    </div>
+  )
+}
+
+export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, onContactSelect, onCreateAOI, isMobile, onClose }) {
   const [tab, setTab] = useState("contacts")
   const [selectedContact, setSelectedContact] = useState(null)
   const [specter, setSpecter] = useState(null)
@@ -66,14 +75,15 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
   }
 
   const shell = {
-    width: PANEL_W, borderLeft: "1px solid var(--line)",
+    width: isMobile ? "100%" : PANEL_W, borderLeft: isMobile ? "none" : "1px solid var(--line)",
     background: "linear-gradient(180deg, #0b121a, #090e14)",
-    display: "flex", flexDirection: "column",
+    display: "flex", flexDirection: "column", height: "100%",
   }
 
   if (selectedContact) {
     return (
       <div style={shell}>
+        {isMobile && onClose && <MobileCloseBar onClose={onClose} />}
         <ContactDetail contact={selectedContact} specter={specter} onBack={() => setSelectedContact(null)} />
       </div>
     )
@@ -81,6 +91,8 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
 
   return (
     <div style={shell}>
+      {isMobile && onClose && <MobileCloseBar onClose={onClose} />}
+
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--line)", background: "#0a1017" }}>
         <TabButton active={tab === "contacts"} onClick={() => setTab("contacts")} icon={<List size={12} />} label="Contacts" count={contacts?.length || 0} />
@@ -106,7 +118,7 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
             </div>
             <div className="label" style={{ marginBottom: 7 }}>Sensor Filter</div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {["all", "optical", "sar", "events", "maritime"].map(s => {
+              {["all", "optical", "sar", "events", "maritime", "thermal", "flights"].map(s => {
                 const on = sourceFilter === s
                 const col = s === "all" ? "var(--accent)" : SOURCE_COLORS[s]
                 return (

@@ -82,6 +82,24 @@ WebSocket. Multi-worker deployments fan out live events via optional Redis pub/s
 | Thermal | NASA FIRMS VIIRS (free key) | Weapons fire, burn-off, convoy heat (brightness-temp + FRP scoring) | ~3–6 hrs |
 | Flights | OpenSky Network (free, no key) | Military callsigns, ISR loiter profiles, emergency squawks | Near real-time |
 
+### Sensor Availability & Known Limitations
+
+Not every sensor works out of the box. The platform degrades gracefully — missing
+sensors reduce coverage but scans never fail.
+
+| Layer | Status | Notes |
+|---|---|---|
+| Optical (Sentinel-2) | Works immediately | Depends on satellite revisit (~5 days). Returns 0 contacts if no recent imagery covers the AOI. |
+| SAR (Sentinel-1) | Works immediately | Same revisit caveat. Detects surface change, not objects. |
+| Events (GDELT) | Works immediately | Free, no key. Lower confidence ceiling (0.65) than ACLED (0.85). |
+| Events (ACLED) | Needs `ACLED_API_KEY` + `ACLED_EMAIL` | Free academic registration, may require approval. |
+| Thermal (FIRMS) | Needs `FIRMS_MAP_KEY` | Free instant key — [register here](https://firms.modaps.eosdis.nasa.gov/api/map_key/) (~60 sec). Highest-impact sensor to enable. |
+| Flights (OpenSky) | Works immediately | Anonymous ADS-B. Military aircraft often squawk Mode-S without callsign. |
+| Maritime (AISHub) | Needs `AISHUB_USERNAME` | **Reciprocal** — requires you to feed AIS data from a physical receiver. Most users won't have one; this layer will be inactive for typical deployments. |
+
+> **Recommendation:** At minimum, get a `FIRMS_MAP_KEY`. It's instant, free, and
+> thermal anomalies fire frequently in conflict and volcanic zones.
+
 ---
 
 ## Quick Start
@@ -123,9 +141,12 @@ docker compose up
 3. **Environment Variables** (add in Render dashboard):
    ```
    GROQ_API_KEY=<your key>
+   FIRMS_MAP_KEY=<your FIRMS key>
+   ACLED_API_KEY=<optional>
    ACLED_EMAIL=<optional>
-   ACLED_KEY=<optional>
    AISHUB_USERNAME=<optional>
+   REDIS_URL=<optional, for multi-worker fan-out>
+   DATA_DIR=/data  # if using persistent volume
    ```
 4. Deploy — note the URL Render gives you, e.g. `https://argus-api.onrender.com`
 
@@ -243,7 +264,7 @@ build on every push to `main`.
 - **Confidence explainability** — every contact shows the exact fusion math ("why this score")
 - **SPECTER overlay** — engagement ring + avenues of approach drawn around simulated contacts
 - **Low-zoom clustering** — theaters collapse into count badges when zoomed out
-- 10 hotspot AOIs pre-seeded on first launch (Galwan, Kashmir LoC, Taiwan Strait, Donbas, Hormuz…)
+- 14 hotspot AOIs pre-seeded on first launch (Galwan, Kashmir LoC, Taiwan Strait, Donbas, Java Volcanic Arc, Eastern DRC…)
 
 ## Roadmap
 
