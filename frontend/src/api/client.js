@@ -1,7 +1,17 @@
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8002"
 
+function getDeviceId() {
+  let id = localStorage.getItem("argus_device_id")
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem("argus_device_id", id)
+  }
+  return id
+}
+
 async function req(url, opts = {}) {
-  const r = await fetch(BASE + url, opts)
+  const headers = { "X-Device-ID": getDeviceId(), ...(opts.headers || {}) }
+  const r = await fetch(BASE + url, { ...opts, headers })
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
   return r.json()
 }

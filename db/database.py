@@ -44,6 +44,7 @@ class AOIRow(Base):
     max_lat = Column(Float, nullable=False)
     domain = Column(String, nullable=False)
     terrain_type = Column(String, nullable=True)
+    device_id = Column(String, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, nullable=False)
     revisit_hours = Column(Integer, default=24)
@@ -115,6 +116,7 @@ class IntelReportRow(Base):
 _MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "aois": [
         ("terrain_type", "VARCHAR"),
+        ("device_id", "VARCHAR"),
     ],
     "fused_contacts": [
         ("track_id", "VARCHAR"),
