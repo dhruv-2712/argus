@@ -2,8 +2,9 @@
 
 ## What This Is
 Multi-source geospatial intelligence fusion platform. Ingests Sentinel-2 
-optical, Sentinel-1 SAR, AIS maritime, and GDELT/ACLED conflict events. 
-Fuses into confidence-scored contacts. Runs OCOKA terrain simulation.
+optical, Sentinel-1 SAR, GDELT/ACLED conflict events, NASA FIRMS thermal, 
+and OpenSky flights. Fuses into confidence-scored contacts. Runs OCOKA 
+terrain simulation.
 
 ## Architecture
 [the folder structure from Phase 1 prompt]
@@ -30,7 +31,7 @@ Fuses into confidence-scored contacts. Runs OCOKA terrain simulation.
 - Phase 2: COMPLETE — Optical layer (Sentinel-2 via Element84 STAC)
 - Phase 3: COMPLETE — Events layer (GDELT + ACLED)
 - Phase 4: COMPLETE — SAR layer (Sentinel-1 via Planetary Computer)
-- Phase 5: COMPLETE — Maritime layer (AISHub vessel tracking)
+- Phase 5: REMOVED — Maritime layer (AISHub) dropped; reciprocal receiver requirement made it unavailable
 - Phase 6: COMPLETE — FastAPI routes (AOI CRUD, scan, contacts, reports)
 - Phase 7: COMPLETE — SPECTER (LangGraph OCOKA) + PDF report generator
 - Phase 8: COMPLETE — React + MapLibre frontend (frontend/)

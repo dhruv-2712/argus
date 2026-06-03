@@ -34,7 +34,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
   const fittedRef = useRef(false)
   const aoisRef = useRef([])
   const selectedAOIRef = useRef(null)
-  const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, maritime: true, thermal: true, flights: true })
+  const [activeSources, setActiveSources] = useState({ optical: true, sar: true, events: true, thermal: true, flights: true })
   const [cursor, setCursor] = useState(null)
   const [zoom, setZoom] = useState(2.2)
   const [zoomLevel, setZoomLevel] = useState(2)
@@ -257,7 +257,7 @@ export default function Map({ aois, contacts, selectedAOI, selectedContact, terr
 
     // ── Escalation zone rings + directional vectors ───────────────────
     // Rings show the threat-spread uncertainty for escalating contacts.
-    // Directional vectors appear when heading data is available (flights/maritime).
+    // Directional vectors appear when heading data is available (flights).
     const trajFeatures = []
     contacts.forEach(c => {
       if (c.lifecycle !== "escalating" && c.lifecycle !== "persistent") return

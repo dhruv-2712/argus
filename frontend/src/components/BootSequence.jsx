@@ -11,7 +11,6 @@ const LINES = [
   { t: "[ 0.088 ] Sentinel-2 EO feed ........... ONLINE", cls: "ok" },
   { t: "[ 0.103 ] Sentinel-1 SAR feed .......... ONLINE", cls: "ok" },
   { t: "[ 0.119 ] GDELT / ACLED SIGINT ......... ONLINE", cls: "ok" },
-  { t: "[ 0.140 ] AIS maritime track net ....... ONLINE", cls: "ok" },
   { t: "[ 0.171 ] SPECTER OCOKA engine ......... ARMED", cls: "warn" },
   { t: "[ 0.205 ] Theater posture monitor ...... ACTIVE", cls: "ok" },
   { t: "", cls: "" },

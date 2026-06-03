@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green) ![LangGraph](https://img.shields.io/badge/LangGraph-0.2-purple) ![React](https://img.shields.io/badge/React-18-61dafb) ![License](https://img.shields.io/badge/license-MIT-orange)
 
-ARGUS fuses **six** open-source intelligence streams — Sentinel-2 optical imagery, Sentinel-1 SAR, AIS maritime vessel tracks, GDELT/ACLED conflict events, NASA FIRMS thermal anomalies, and OpenSky live aircraft tracks — into confidence-scored intelligence contacts using **Dempster-Shafer evidence fusion**. A LangGraph OCOKA pipeline (**SPECTER**) runs terrain analysis on high-confidence detections, an autonomous scheduler re-scans every active area on its revisit cadence, and the system auto-generates PDF intelligence briefs. A React + MapLibre command-and-control UI renders everything on a live satellite map.
+ARGUS fuses **five** open-source intelligence streams — Sentinel-2 optical imagery, Sentinel-1 SAR, GDELT/ACLED conflict events, NASA FIRMS thermal anomalies, and OpenSky live aircraft tracks — into confidence-scored intelligence contacts using **Dempster-Shafer evidence fusion**. A LangGraph OCOKA pipeline (**SPECTER**) runs terrain analysis on high-confidence detections, an autonomous scheduler re-scans every active area on its revisit cadence, and the system auto-generates PDF intelligence briefs. A React + MapLibre command-and-control UI renders everything on a live satellite map.
 
 ![ARGUS Demo](docs/demo.gif)
 
@@ -74,7 +74,6 @@ argus/
 │   ├── optical/                # Sentinel-2 (Element84 STAC, free)
 │   ├── sar/                    # Sentinel-1 (Planetary Computer, free)
 │   ├── events/                 # GDELT (free) + ACLED (free key)
-│   ├── maritime/               # AISHub vessel tracks (free username)
 │   ├── thermal/                # NASA FIRMS VIIRS (free MAP_KEY)
 │   └── flights/                # OpenSky ADS-B (no key)
 │
@@ -127,16 +126,15 @@ Data Sources           Ingestion              Detection             Fusion      
 Sentinel-2 L2A   -->  optical/ingest.py  --> optical/detect.py  \
 Sentinel-1 GRD   -->  sar/ingest.py      --> sar/detect.py       \
 GDELT / ACLED    -->  events/ingest.py   --> events/detect.py     --> FusionEngine --> SPECTER --> PDF
-AIS vessels      -->  maritime/ingest.py --> maritime/detect.py   /   (DS + corrob)  (OCOKA)   --> API
-NASA FIRMS       -->  thermal/ingest.py  --> thermal/detect.py   /                             --> MapLibre UI
-OpenSky ADS-B    -->  flights/ingest.py  --> flights/detect.py  /
+NASA FIRMS       -->  thermal/ingest.py  --> thermal/detect.py    /   (DS + corrob)  (OCOKA)   --> API
+OpenSky ADS-B    -->  flights/ingest.py  --> flights/detect.py   /                             --> MapLibre UI
 
 Fusion rules:
   Single-source:  weighted-mean x0.6  (uncorroborated penalty)
   Multi-source:   Dempster-Shafer evidence combination (40%) blended with
                   corroboration multiplier (60%): 2 src x1.3 | 3+ x1.6 | cap 0.97
   Contradiction (different types, >48h span): cap 0.4
-  Source reliability: SAR 1.0 | optical 0.95 | maritime 0.90 | thermal 0.85 | flights 0.80 | events 0.70
+  Source reliability: SAR 1.0 | optical 0.95 | thermal 0.85 | flights 0.80 | events 0.70
   Threat: <0.35 low | 0.35-0.6 medium | 0.6-0.85 high | >0.85 critical
 ```
 
@@ -153,7 +151,6 @@ WebSocket. Multi-worker deployments fan out live events via optional Redis pub/s
 | Optical | Sentinel-2 L2A via Element84 STAC (free) | Construction, terrain clearance, force buildup (SSIM + NDVI/SWIR) | ~5 days |
 | SAR | Sentinel-1 GRD via Planetary Computer (free) | Surface disturbance, construction (amplitude correlation) | ~6 days |
 | Events | GDELT (free) + ACLED (free academic) | Military activity, conflict events from news & structured data | Near real-time |
-| Maritime | AISHub (free tier) | Loitering, formation sailing, dark (AIS-gap) vessels | ~30 min |
 | Thermal | NASA FIRMS VIIRS (free key) | Weapons fire, burn-off, convoy heat (brightness-temp + FRP scoring) | ~3–6 hrs |
 | Flights | OpenSky Network (free, no key) | Military callsigns, ISR loiter profiles, emergency squawks | Near real-time |
 
@@ -170,7 +167,6 @@ sensors reduce coverage but scans never fail.
 | Events (ACLED) | Needs `ACLED_API_KEY` + `ACLED_EMAIL` | Free academic registration, may require approval. |
 | Thermal (FIRMS) | Needs `FIRMS_MAP_KEY` | Free instant key — [register here](https://firms.modaps.eosdis.nasa.gov/api/map_key/) (~60 sec). Highest-impact sensor to enable. |
 | Flights (OpenSky) | Works immediately | Anonymous ADS-B. Military aircraft often squawk Mode-S without callsign. |
-| Maritime (AISHub) | Needs `AISHUB_USERNAME` | **Reciprocal** — requires you to feed AIS data from a physical receiver. Most users won't have one; this layer will be inactive for typical deployments. |
 
 > **Recommendation:** At minimum, get a `FIRMS_MAP_KEY`. It's instant, free, and
 > thermal anomalies fire frequently in conflict and volcanic zones.
@@ -219,7 +215,6 @@ docker compose up
    FIRMS_MAP_KEY=<your FIRMS key>
    ACLED_API_KEY=<optional>
    ACLED_EMAIL=<optional>
-   AISHUB_USERNAME=<optional>
    REDIS_URL=<optional, for multi-worker fan-out>
    DATA_DIR=/data  # if using persistent volume
    ```
@@ -282,7 +277,7 @@ curl http://localhost:8002/reports/{report_id}/pdf -o report.pdf
 Dark military C2 / Palantir-Gotham aesthetic on a live ESRI satellite basemap:
 - Diamond contact markers colored by threat, sized by confidence (critical pulses)
 - Cyan AOI bounding boxes, click-to-plot draw mode
-- Sensor-feed toggles (EO / SAR / SIGINT / AIS / THRM / FLGT), live cursor LAT/LON/ZOOM readout
+- Sensor-feed toggles (EO / SAR / SIGINT / THRM / FLGT), live cursor LAT/LON/ZOOM readout
 - Contact-density heatmap at low zoom; escalation rings + directional trajectory vectors
 - Right panel: Contacts (threat + sensor filters), Areas, Status (threat donut + PDF report)
 - SPECTER terrain dossier with collapsible OCOKA factors
@@ -297,7 +292,6 @@ Dark military C2 / Palantir-Gotham aesthetic on a live ESRI satellite basemap:
 | Sentinel-1 GRD | planetarycomputer.microsoft.com | None |
 | GDELT | gdeltproject.org | None |
 | ACLED | acleddata.com | Free academic key |
-| AISHub | aishub.net | Free username |
 | NASA FIRMS | firms.modaps.eosdis.nasa.gov | Free MAP_KEY (`FIRMS_MAP_KEY`) |
 | OpenSky Network | opensky-network.org | None |
 | Open-Elevation | api.open-elevation.com | None |

@@ -19,7 +19,6 @@ _TEMPORAL_COHERENCE_HOURS = 48
 SOURCE_RELIABILITY: dict[str, float] = {
     "sar": 1.00,       # all-weather radar, physical backscatter measurement
     "optical": 0.95,   # high-res imagery, but cloud/illumination dependent
-    "maritime": 0.90,  # structured AIS positional data
     "thermal": 0.85,   # VIIRS radiometric, coarser spatial resolution
     "flights": 0.80,   # ADS-B self-reported, spoofable but high coverage
     "events": 0.70,    # news/sentiment, coarse geolocation, higher noise

@@ -29,7 +29,6 @@ SOURCE_COLORS = {
     "optical": (52, 152, 219),
     "sar": (155, 89, 182),
     "events": (230, 126, 34),
-    "maritime": (26, 188, 156),
     "thermal": (255, 107, 53),
     "flights": (224, 212, 90),
 }

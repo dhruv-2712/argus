@@ -118,7 +118,7 @@ export default function RightPanel({ contacts, aois, selectedAOI, onAOISelect, o
             </div>
             <div className="label" style={{ marginBottom: 7 }}>Sensor Filter</div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {["all", "optical", "sar", "events", "maritime", "thermal", "flights"].map(s => {
+              {["all", "optical", "sar", "events", "thermal", "flights"].map(s => {
                 const on = sourceFilter === s
                 const col = s === "all" ? "var(--accent)" : SOURCE_COLORS[s]
                 return (

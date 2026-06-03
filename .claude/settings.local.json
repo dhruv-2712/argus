@@ -14,7 +14,11 @@
       "Bash(python *)",
       "Bash(npm create *)",
       "Bash(npm run *)",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(Get-ChildItem -Path \"C:\\\\argus\" -Recurse -Directory -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
