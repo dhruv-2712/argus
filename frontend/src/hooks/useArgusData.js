@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "../api/client"
 
 export function useAOIs() {
-  return useQuery({ queryKey: ["aois"], queryFn: api.listAOIs, refetchInterval: 60000 })
+  return useQuery({ queryKey: ["aois"], queryFn: api.listAOIs, refetchInterval: 120000 })
 }
 
 export function useContacts(filters) {
@@ -10,7 +10,18 @@ export function useContacts(filters) {
     queryKey: ["contacts", filters],
     queryFn: () => api.getContacts(filters),
     enabled: true,
-    refetchInterval: 30000,
+    refetchInterval: 60000,
+  })
+}
+
+export function useDeleteAOI() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.deleteAOI(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aois"] })
+      qc.invalidateQueries({ queryKey: ["contacts"] })
+    },
   })
 }
 
@@ -46,7 +57,7 @@ export function useGenerateReport() {
 }
 
 export function useRegional() {
-  return useQuery({ queryKey: ["regional"], queryFn: api.getRegional, refetchInterval: 30000 })
+  return useQuery({ queryKey: ["regional"], queryFn: api.getRegional, refetchInterval: 60000 })
 }
 
 export function useContactDetail(contactId) {

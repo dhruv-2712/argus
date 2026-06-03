@@ -1,5 +1,6 @@
 """Start/stop monitoring and trigger scans for an AOI."""
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -10,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_orchestrator, get_specter
+from api.ratelimit import SCAN_SEMAPHORE, rate_limit
 from api.scanner import ScanOrchestrator
 from core.fusion.summary import build_scan_summary, polish_summary_llm
 from core.models import AOI, FusedContact
@@ -47,7 +49,7 @@ async def _get_aoi_row(aoi_id: str) -> AOIRow:
     return row
 
 
-@router.post("/{aoi_id}/scan")
+@router.post("/{aoi_id}/scan", dependencies=[Depends(rate_limit("scan", 15.0))])
 async def scan_aoi(
     aoi_id: str,
     body: ScanRequest | None = None,
@@ -57,8 +59,19 @@ async def scan_aoi(
     row = await _get_aoi_row(aoi_id)
     aoi = _row_to_aoi(row)
 
-    layers = body.layers if body else None
-    result = await orchestrator.scan(aoi, layers=layers)
+    # Cap concurrent scans worker-wide so one client can't thrash the instance.
+    try:
+        await asyncio.wait_for(SCAN_SEMAPHORE.acquire(), timeout=0.5)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Scanner is busy with another request — try again in a moment.",
+        )
+    try:
+        layers = body.layers if body else None
+        result = await orchestrator.scan(aoi, layers=layers)
+    finally:
+        SCAN_SEMAPHORE.release()
 
     fused = result["fused_contacts"]
     if not fused and result["raw_contact_count"] == 0 and len(result["layer_errors"]) == len(result["layers_run"]):

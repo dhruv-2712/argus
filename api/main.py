@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -130,22 +131,33 @@ async def _autonomous_scan() -> None:
             logger.error("Auto-scan failed for %s: %s", aoi.name, exc)
 
 
+_ENABLE_AUTOSCAN = os.getenv("ENABLE_AUTOSCAN", "").strip().lower() in ("1", "true", "yes")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Initialize DB, seed AOIs, and start the autonomous scan scheduler."""
+    """Initialize DB, seed AOIs, and (optionally) start the scan scheduler."""
     await init_db()
     await _seed_demo_aoi()
-    _scheduler.add_job(
-        _autonomous_scan, "interval", hours=1,
-        id="auto_scan", coalesce=True, max_instances=1, replace_existing=True,
-    )
-    _scheduler.start()
+    # The autonomous hourly scan is OFF by default: on a public free-tier
+    # deploy it would otherwise re-scan every seeded AOI around the clock with
+    # zero users, burning external API quota. Enable with ENABLE_AUTOSCAN=true
+    # when running a dedicated instance.
+    if _ENABLE_AUTOSCAN:
+        _scheduler.add_job(
+            _autonomous_scan, "interval", hours=1,
+            id="auto_scan", coalesce=True, max_instances=1, replace_existing=True,
+        )
+        _scheduler.start()
+        logger.info("ARGUS API started — autonomous scan scheduler ACTIVE (1h interval)")
+    else:
+        logger.info("ARGUS API started — autonomous scan DISABLED (set ENABLE_AUTOSCAN=true to enable)")
     # Start Redis subscriber for multi-worker WebSocket fan-out (no-op if REDIS_URL unset)
     from api.routes.ws import start_redis_subscriber
     asyncio.create_task(start_redis_subscriber())
-    logger.info("ARGUS API started — autonomous scan scheduler active (1h interval)")
     yield
-    _scheduler.shutdown(wait=False)
+    if _ENABLE_AUTOSCAN and _scheduler.running:
+        _scheduler.shutdown(wait=False)
     logger.info("ARGUS API shutting down")
 
 
@@ -156,10 +168,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Lock CORS to known origins in production via ALLOWED_ORIGINS (comma-separated).
+# Falls back to permissive "*" for local dev — but with credentials disabled,
+# so it's the spec-valid form (no cookies are used; only the X-Device-ID header).
+_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+_allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

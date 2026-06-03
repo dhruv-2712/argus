@@ -15,17 +15,25 @@ const labelStyle = {
 export default function CreateAOIModal({ bbox, onClose }) {
   const create = useCreateAOI()
   const [form, setForm] = useState({ name: "", domain: "land", revisit_hours: 24 })
+  const [error, setError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!bbox) return
-    await create.mutateAsync({
-      name: form.name,
-      domain: form.domain,
-      revisit_hours: Number(form.revisit_hours),
-      bbox,
-    })
-    onClose()
+    setError(null)
+    try {
+      await create.mutateAsync({
+        name: form.name,
+        domain: form.domain,
+        revisit_hours: Number(form.revisit_hours),
+        bbox,
+      })
+      onClose()
+    } catch (err) {
+      // Surface the backend reason (e.g. AOI too large, bad domain) instead of
+      // silently closing or leaving an unhandled rejection.
+      setError(err.message || "Failed to create area")
+    }
   }
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
@@ -65,11 +73,17 @@ export default function CreateAOIModal({ bbox, onClose }) {
           </div>
 
           {bbox && (
-            <div style={{ marginBottom: 18, background: "#060b10", border: "1px solid var(--line)", padding: "8px 11px" }}>
+            <div style={{ marginBottom: 14, background: "#060b10", border: "1px solid var(--line)", padding: "8px 11px" }}>
               <div style={labelStyle}>Bounding Box</div>
               <div className="mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.04em" }}>
                 [{bbox.map(v => v.toFixed(4)).join(", ")}]
               </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mono" style={{ marginBottom: 14, background: "rgba(255,66,66,0.08)", border: "1px solid var(--red)", borderLeft: "3px solid var(--red)", padding: "8px 11px", color: "var(--red)", fontSize: 11, letterSpacing: "0.03em", lineHeight: 1.5 }}>
+              {error}
             </div>
           )}
 

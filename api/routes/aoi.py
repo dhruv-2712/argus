@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, field_validator
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 
 from core.models import AOI
-from db.database import AOIRow, async_session
+from db.database import AOIRow, ContactRow, FusedContactRow, async_session
 
 router = APIRouter(prefix="/aoi", tags=["aoi"])
 
@@ -32,6 +32,10 @@ class AOICreate(BaseModel):
             raise ValueError("latitude must be between -90 and 90")
         if min_lon >= max_lon or min_lat >= max_lat:
             raise ValueError("min values must be less than max values")
+        # Cap area so a user can't request a hemisphere-sized raster that would
+        # OOM/timeout the free instance. 5° per side is generous for any AOI.
+        if (max_lon - min_lon) > 5 or (max_lat - min_lat) > 5:
+            raise ValueError("AOI too large — each side must span at most 5 degrees")
         return v
 
     @field_validator("domain")
@@ -70,6 +74,12 @@ async def create_aoi(
     x_device_id: str | None = Header(default=None),
 ) -> dict:
     """Create a new AOI scoped to the requesting device."""
+    # A missing device id would otherwise store device_id=NULL, which the
+    # listing treats as a global "system" AOI visible to everyone and which
+    # cannot be deleted. Require the header so only the browser client (which
+    # always sends it) can create AOIs, and they stay device-scoped.
+    if not x_device_id or not x_device_id.strip():
+        raise HTTPException(status_code=400, detail="Missing device identifier")
     row = AOIRow(
         id=str(uuid.uuid4()),
         name=body.name,
@@ -126,7 +136,11 @@ async def update_aoi(
         row = await session.get(AOIRow, aoi_id)
         if not row:
             raise HTTPException(status_code=404, detail="AOI not found")
-        if row.device_id is not None and row.device_id != x_device_id:
+        # System (seeded) AOIs are shared — nobody may mutate them. User AOIs
+        # may only be modified by their owning device.
+        if row.device_id is None:
+            raise HTTPException(status_code=403, detail="System AOIs are read-only")
+        if row.device_id != x_device_id:
             raise HTTPException(status_code=403, detail="Not your AOI")
         if body.name is not None:
             row.name = body.name
@@ -144,7 +158,7 @@ async def delete_aoi(
     aoi_id: str,
     x_device_id: str | None = Header(default=None),
 ) -> dict:
-    """Delete a user-created AOI — only the owning device may delete it."""
+    """Hard-delete a user-created AOI and its contacts — owner only."""
     async with async_session() as session:
         row = await session.get(AOIRow, aoi_id)
         if not row:
@@ -153,7 +167,9 @@ async def delete_aoi(
             raise HTTPException(status_code=403, detail="System AOIs cannot be deleted")
         if row.device_id != x_device_id:
             raise HTTPException(status_code=403, detail="Not your AOI")
-        row.active = False
+        # Remove the AOI and any contacts/fused records it produced.
+        await session.execute(delete(ContactRow).where(ContactRow.aoi_id == aoi_id))
+        await session.execute(delete(FusedContactRow).where(FusedContactRow.aoi_id == aoi_id))
+        await session.delete(row)
         await session.commit()
-        await session.refresh(row)
-    return _row_to_dict(row)
+    return {"deleted": aoi_id}

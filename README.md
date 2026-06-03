@@ -215,9 +215,15 @@ docker compose up
    ACLED_API_KEY=<optional>
    ACLED_EMAIL=<optional>
    REDIS_URL=<optional, for multi-worker fan-out>
-   DATA_DIR=/data  # if using persistent volume
+   DATA_DIR=/data                       # if using a persistent volume
+   ALLOWED_ORIGINS=https://your-app.vercel.app   # lock CORS to your frontend
+   ENABLE_AUTOSCAN=                     # leave blank to keep hourly auto-scan OFF
    ```
 4. Deploy — note the URL Render gives you, e.g. `https://argus-api.onrender.com`
+
+> **Keep the backend warm:** Render free tier spins down after 15 min idle
+> (~30s cold start). Point a free [UptimeRobot](https://uptimerobot.com) HTTP
+> monitor at `https://your-api.onrender.com/health` every 5 minutes to avoid it.
 
 ### Frontend → Vercel
 
@@ -243,6 +249,29 @@ docker compose up
 3. Add env var `VITE_API_URL=https://your-backend.onrender.com`
 
 ---
+
+## Security & Production Hardening
+
+ARGUS is a public, key-free demo, so the API is built to survive curious
+visitors and abuse:
+
+- **Rate limiting** — the expensive `/scan` endpoint is throttled per-IP (one
+  scan every 15s) and capped to 2 concurrent scans per worker, so a single
+  client can't swamp the instance or burn LLM quota.
+- **Bounded scan latency** — SPECTER terrain analysis runs concurrently on only
+  the top-confidence contacts, and the frontend applies request timeouts so a
+  cold backend never hangs the UI indefinitely.
+- **Device-scoped AOIs** — each browser gets an anonymous device ID (stored in
+  `localStorage`, sent as `X-Device-ID`). You only see the 14 shared system
+  areas plus the ones you plot; another visitor's custom areas stay on their
+  device. System areas are read-only and can't be modified or deleted.
+- **Input validation** — AOI bounding boxes are capped at 5° per side so nobody
+  can request a hemisphere-sized raster that would OOM the free instance.
+- **Locked CORS** — set `ALLOWED_ORIGINS` to your frontend domain in production
+  (credential-less, spec-valid CORS).
+- **No runaway background load** — the hourly autonomous re-scan is **off by
+  default** (`ENABLE_AUTOSCAN=true` to enable), so an idle public deploy doesn't
+  hammer free data sources around the clock.
 
 ## API Reference
 

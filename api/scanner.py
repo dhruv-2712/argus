@@ -65,18 +65,28 @@ class ScanOrchestrator:
         history = await self._load_history(aoi.id)
         self.temporal.correlate(fused, history, now)
 
-        # Run SPECTER on contacts above threshold
+        # Run SPECTER only on the highest-confidence contacts, concurrently.
+        # Each analysis hits the elevation API + an LLM, so analyzing every
+        # contact serially would balloon scan latency. Top 3 is what an
+        # operator actually cares about and keeps the request bounded.
         specter_results: dict[str, dict] = {}
         from core.simulation.ocoka import Specter
         specter = Specter()
-        for fc in fused:
+        top_contacts = sorted(fused, key=lambda f: f.confidence, reverse=True)[:3]
+
+        async def _run_specter(fc: FusedContact) -> tuple[str, dict] | None:
             try:
                 result = await specter.analyze(aoi, fc)
                 if result:
                     fc.simulation_run = True
-                    specter_results[fc.id] = result
+                    return fc.id, result
             except Exception as exc:
                 logger.warning("SPECTER failed for %s: %s", fc.id, exc)
+            return None
+
+        for item in await asyncio.gather(*(_run_specter(fc) for fc in top_contacts)):
+            if item:
+                specter_results[item[0]] = item[1]
 
         await self._persist(aoi, all_contacts, fused)
 
