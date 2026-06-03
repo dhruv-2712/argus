@@ -44,6 +44,81 @@ Output PDF: `reports/galwan_2020_demo.pdf`
 
 ---
 
+## Folder Structure
+
+```
+argus/
+├── api/                        # FastAPI application
+│   ├── main.py                 # App entry point, lifespan, AOI seeding, scheduler
+│   ├── scanner.py              # ScanOrchestrator — runs all layers + fusion
+│   └── routes/
+│       ├── aoi.py              # AOI CRUD + scan endpoint
+│       ├── contacts.py         # Fused contact queries
+│       ├── intel.py            # Theater posture, track history, terrain
+│       ├── reports.py          # PDF report generation
+│       ├── monitor.py          # Health / sensor status
+│       └── ws.py               # WebSocket live feed + Redis fan-out
+│
+├── core/
+│   ├── models.py               # Pydantic v2 models (AOI, Contact, FusedContact…)
+│   ├── fusion/
+│   │   ├── engine.py           # Fusion engine — cluster + score contacts
+│   │   ├── dempster_shafer.py  # DS evidence combination
+│   │   └── temporal.py         # Track correlation across scans
+│   └── simulation/
+│       ├── ocoka.py            # SPECTER LangGraph OCOKA pipeline
+│       └── terrain.py          # Open-Elevation terrain geometry
+│
+├── layers/                     # Intelligence sensor layers
+│   ├── base.py                 # Abstract layer interface
+│   ├── optical/                # Sentinel-2 (Element84 STAC, free)
+│   ├── sar/                    # Sentinel-1 (Planetary Computer, free)
+│   ├── events/                 # GDELT (free) + ACLED (free key)
+│   ├── maritime/               # AISHub vessel tracks (free username)
+│   ├── thermal/                # NASA FIRMS VIIRS (free MAP_KEY)
+│   └── flights/                # OpenSky ADS-B (no key)
+│
+├── db/
+│   └── database.py             # SQLAlchemy async ORM + init
+│
+├── reports/
+│   └── generator.py            # PDF intelligence brief (WeasyPrint)
+│
+├── tests/                      # 57-test pytest suite
+│   ├── test_fusion.py
+│   ├── test_dempster_shafer.py
+│   ├── test_thermal.py
+│   ├── test_flights.py
+│   └── test_terrain.py
+│
+├── scripts/
+│   ├── galwan_demo.py          # Galwan Valley retrospective demo
+│   └── pipeline_demo.py        # End-to-end pipeline smoke test
+│
+├── frontend/                   # React + MapLibre C2 UI
+│   └── src/
+│       ├── App.jsx             # Root — layout, mobile drawer, boot gate
+│       ├── components/
+│       │   ├── Map.jsx         # MapLibre map, markers, SPECTER overlay
+│       │   ├── Header.jsx      # AOI selector, scan button, UTC clock
+│       │   ├── RightPanel.jsx  # Contacts / Areas / Status tabs
+│       │   ├── ContactDetail.jsx
+│       │   ├── BootSequence.jsx
+│       │   ├── TimelineScrubber.jsx
+│       │   ├── CommandPalette.jsx
+│       │   └── TheaterPosture.jsx
+│       ├── hooks/
+│       │   ├── useArgusData.js # React Query hooks for all API calls
+│       │   └── useLiveFeed.js  # WebSocket live contact feed
+│       └── lib/sound.js        # Audio cues
+│
+├── .github/workflows/ci.yml    # GitHub Actions — pytest + Vite build
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
 ## Architecture
 
 ```
