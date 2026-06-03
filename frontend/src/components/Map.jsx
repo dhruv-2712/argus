@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
+import MaplibreWorker from "maplibre-gl/dist/maplibre-gl-csp-worker?worker"
 import { THREAT_COLORS, SOURCE_COLORS, SOURCE_CODE, THREAT_ORDER } from "../constants"
+
+maplibregl.workerClass = MaplibreWorker
 
 // ── Geo helpers for the SPECTER overlay ──────────────────────────
 const R_EARTH = 6371 // km
