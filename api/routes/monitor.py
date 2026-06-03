@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_orchestrator, get_specter
 from api.scanner import ScanOrchestrator
+from core.fusion.summary import build_scan_summary, polish_summary_llm
 from core.models import AOI, FusedContact
 from core.simulation.ocoka import Specter
 from db.database import AOIRow, FusedContactRow, async_session
@@ -65,6 +66,12 @@ async def scan_aoi(
             detail={"scan_failed": True, "errors": result["layer_errors"]},
         )
 
+    # Plain-language summary of what this scan did and found. The deterministic
+    # backbone is instant; the Groq pass (best-effort) rewrites it into simpler
+    # English and falls back silently if the key is missing or the call fails.
+    summary = build_scan_summary(aoi, result)
+    summary["narrative"] = await polish_summary_llm(summary["narrative"])
+
     # Push a live event to all connected operators.
     from api.routes.ws import broadcast
     await broadcast({
@@ -87,6 +94,7 @@ async def scan_aoi(
         "raw_contact_count": result["raw_contact_count"],
         "layer_errors": result["layer_errors"],
         "layers_run": result["layers_run"],
+        "summary": summary,
     }
 
 

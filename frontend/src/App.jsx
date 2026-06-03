@@ -11,6 +11,7 @@ import CommandPalette from "./components/CommandPalette"
 import TimelineScrubber from "./components/TimelineScrubber"
 import ErrorBoundary from "./components/ErrorBoundary"
 import MapLoader from "./components/MapLoader"
+import ScanSummary from "./components/ScanSummary"
 import { useAOIs, useContacts, useScan, useTerrain } from "./hooks/useArgusData"
 import { useLiveFeed } from "./hooks/useLiveFeed"
 import { scanStart, bootHum } from "./lib/sound"
@@ -72,6 +73,7 @@ function ArgusApp() {
   const [showTimeline, setShowTimeline] = useState(false)
   const isMobile = useIsMobile()
   const [panelOpen, setPanelOpen] = useState(false)
+  const [scanSummary, setScanSummary] = useState(null)
 
   useEffect(() => {
     setContactFilters(selectedAOI ? { aoi_id: selectedAOI.id } : {})
@@ -83,9 +85,11 @@ function ArgusApp() {
 
   const handleScan = async (id) => {
     setScanError(null)
+    setScanSummary(null)
     scanStart()
     try {
-      await scan.mutateAsync({ id })
+      const res = await scan.mutateAsync({ id })
+      if (res?.summary) setScanSummary({ ...res.summary, aoiName: aois.find(a => a.id === id)?.name || "AREA" })
     } catch (e) {
       setScanError(e.message)
       setTimeout(() => setScanError(null), 5000)
@@ -234,6 +238,14 @@ function ArgusApp() {
             </Suspense>
           </ErrorBoundary>
           <ScanOverlay active={scan.isPending} />
+
+          {scanSummary && (
+            <ScanSummary
+              summary={scanSummary}
+              aoiName={scanSummary.aoiName}
+              onClose={() => setScanSummary(null)}
+            />
+          )}
 
           {/* Mobile: floating button to open the intel panel */}
           {isMobile && (
