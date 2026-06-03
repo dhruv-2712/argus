@@ -29,7 +29,8 @@ function lineRing(lat, lon, radiusKm, color, steps = 48) {
   return { type: "Feature", properties: { color }, geometry: { type: "LineString", coordinates: coords } }
 }
 
-export default function Map({ aois, contacts, selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete, isMobile }) {
+export default function Map(props) {
+  const { aois = [], contacts = [], selectedAOI, selectedContact, terrain, onContactClick, drawMode, onDrawComplete, isMobile } = props || {}
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])

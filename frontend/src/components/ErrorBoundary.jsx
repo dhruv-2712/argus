@@ -1,12 +1,9 @@
 import { Component } from "react"
 
-// Catches render/mount errors (incl. lazy-chunk load failures) so a single
-// component fault shows a recoverable message instead of unmounting the whole
-// tree and leaving a blank --bg screen.
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { error: null }
+    this.state = { error: null, retried: false }
   }
 
   static getDerivedStateFromError(error) {
@@ -16,6 +13,9 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
     console.error("ARGUS render fault:", error, info)
+    if (!this.state.retried) {
+      this.setState({ error: null, retried: true })
+    }
   }
 
   render() {
@@ -40,7 +40,7 @@ export default class ErrorBoundary extends Component {
             {String(this.state.error?.message || this.state.error)}
           </div>
           <button
-            onClick={() => { this.setState({ error: null }); window.location.reload() }}
+            onClick={() => { this.setState({ error: null, retried: false }); window.location.reload() }}
             className="mono"
             style={{
               marginTop: 6, background: "var(--accent-dim)", border: "1px solid var(--accent)",
