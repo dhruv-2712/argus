@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_orchestrator, get_specter
@@ -31,6 +31,7 @@ def _row_to_aoi(row: AOIRow) -> AOI:
         name=row.name,
         bbox=(row.min_lon, row.min_lat, row.max_lon, row.max_lat),
         domain=row.domain,
+        terrain_type=row.terrain_type,
         active=row.active,
         created_at=row.created_at,
         revisit_hours=row.revisit_hours,
@@ -227,3 +228,20 @@ async def simulate_contact(
         "threat_assessment": result["threat_assessment"],
         "final_report": result["final_report"],
     }
+
+
+@router.post("/admin/fix-terrain-types")
+async def fix_terrain_types() -> dict:
+    """One-shot migration: set terrain_type on seeded AOIs. Delete after use."""
+    updates = [
+        ("volcanic", "Java Volcanic Arc"),
+        ("glacial",  "Siachen Glacier"),
+    ]
+    async with async_session() as session:
+        for terrain, name in updates:
+            await session.execute(
+                text("UPDATE aois SET terrain_type=:t WHERE name=:n"),
+                {"t": terrain, "n": name},
+            )
+        await session.commit()
+    return {"ok": True, "updated": [name for _, name in updates]}

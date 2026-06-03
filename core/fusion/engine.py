@@ -118,6 +118,11 @@ class FusionEngine:
 
             latest_ts = max(c.timestamp for c in cluster)
 
+            # Geological activity is environmental noise, not a threat — cap below medium.
+            if detection_types == ["geological_activity"]:
+                confidence = min(confidence, 0.34)
+                threat_level = "low"
+
             summary = self._build_summary(cluster, sources, detection_types, confidence)
 
             fused.append(

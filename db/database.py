@@ -43,6 +43,7 @@ class AOIRow(Base):
     max_lon = Column(Float, nullable=False)
     max_lat = Column(Float, nullable=False)
     domain = Column(String, nullable=False)
+    terrain_type = Column(String, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, nullable=False)
     revisit_hours = Column(Integer, default=24)
@@ -112,6 +113,9 @@ class IntelReportRow(Base):
 
 # Columns added after the initial schema — applied to existing DBs on startup.
 _MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "aois": [
+        ("terrain_type", "VARCHAR"),
+    ],
     "fused_contacts": [
         ("track_id", "VARCHAR"),
         ("first_seen", "DATETIME"),

@@ -146,8 +146,9 @@ async def generate_report(aoi_id: str, body: ReportRequest | None = None) -> dic
     aoi_model = AOI(
         id=aoi_row.id, name=aoi_row.name,
         bbox=(aoi_row.min_lon, aoi_row.min_lat, aoi_row.max_lon, aoi_row.max_lat),
-        domain=aoi_row.domain, active=aoi_row.active,
-        created_at=aoi_row.created_at, revisit_hours=aoi_row.revisit_hours,
+        domain=aoi_row.domain, terrain_type=aoi_row.terrain_type,
+        active=aoi_row.active, created_at=aoi_row.created_at,
+        revisit_hours=aoi_row.revisit_hours,
     )
     fc_models = [
         FusedContact(

@@ -234,8 +234,13 @@ async def detect(aoi: AOI, raw_data: dict) -> list[Contact]:
         raw_data["metadata"],
     )
 
+    is_natural_noise = getattr(aoi, "terrain_type", None) in ("volcanic", "glacial")
+
     contacts: list[Contact] = []
     for a in anomalies:
+        dt = a["detection_type"]
+        if is_natural_noise and dt in ("construction", "terrain_clearance"):
+            dt = "geological_activity"
         contacts.append(
             Contact(
                 id=str(uuid.uuid4()),
@@ -243,11 +248,11 @@ async def detect(aoi: AOI, raw_data: dict) -> list[Contact]:
                 timestamp=datetime.now(timezone.utc),
                 source="optical",
                 confidence=a["confidence"],
-                detection_type=a["detection_type"],
+                detection_type=dt,
                 lat=a["lat"],
                 lon=a["lon"],
                 description=(
-                    f"Optical {a['detection_type'].replace('_', ' ')} detected "
+                    f"Optical {dt.replace('_', ' ')} detected "
                     f"via {a['dominant_band']} analysis "
                     f"(SSIM: {a['ssim_score']:.2f})"
                 ),

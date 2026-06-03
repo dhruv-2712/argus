@@ -57,6 +57,7 @@ def _row_to_dict(row: AOIRow) -> dict:
         "name": row.name,
         "bbox": [row.min_lon, row.min_lat, row.max_lon, row.max_lat],
         "domain": row.domain,
+        "terrain_type": row.terrain_type,
         "active": row.active,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "revisit_hours": row.revisit_hours,

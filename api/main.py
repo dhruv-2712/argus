@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 _SEED_AOIS = [
     {"name": "Galwan Valley",           "bbox": [79.8, 34.2, 80.6, 34.8], "domain": "land"},
     {"name": "Kashmir LoC",             "bbox": [73.8, 33.5, 74.8, 34.5], "domain": "land"},
-    {"name": "Siachen Glacier",         "bbox": [76.5, 35.2, 77.5, 36.0], "domain": "land"},
+    {"name": "Siachen Glacier",         "bbox": [76.5, 35.2, 77.5, 36.0], "domain": "land", "terrain_type": "glacial"},
     {"name": "Spratly Islands",         "bbox": [113.5,  9.5, 115.5, 11.5], "domain": "maritime"},
     {"name": "Taiwan Strait",           "bbox": [119.5, 23.0, 122.0, 26.0], "domain": "maritime"},
     {"name": "Strait of Hormuz",        "bbox": [ 56.0, 25.5,  57.5, 27.0], "domain": "maritime"},
@@ -34,7 +34,7 @@ _SEED_AOIS = [
     {"name": "Donbas Front",            "bbox": [ 37.0, 47.5,  39.5, 49.0], "domain": "land"},
     {"name": "Gaza Strip",              "bbox": [ 34.2, 31.2,  34.6, 31.6], "domain": "land"},
     {"name": "Gulf of Aden",            "bbox": [ 44.0, 11.0,  51.0, 15.0], "domain": "maritime"},
-    {"name": "Java Volcanic Arc",       "bbox": [109.5, -8.0, 111.0, -7.0], "domain": "land"},
+    {"name": "Java Volcanic Arc",       "bbox": [109.5, -8.0, 111.0, -7.0], "domain": "land", "terrain_type": "volcanic"},
     {"name": "Eastern DRC",             "bbox": [ 28.5, -3.0,  30.0, -1.0], "domain": "land"},
     {"name": "Red Sea — Bab el-Mandeb", "bbox": [ 42.5, 12.0,  44.0, 14.0], "domain": "maritime"},
     {"name": "Sudan — Khartoum",        "bbox": [ 32.0, 15.0,  33.5, 16.0], "domain": "land"},
@@ -54,6 +54,7 @@ async def _seed_demo_aoi() -> None:
                 name=spec["name"],
                 min_lon=b[0], min_lat=b[1], max_lon=b[2], max_lat=b[3],
                 domain=spec["domain"],
+                terrain_type=spec.get("terrain_type"),
                 active=True,
                 created_at=now,
                 revisit_hours=24,
@@ -105,8 +106,9 @@ async def _autonomous_scan() -> None:
         aoi = AOI(
             id=row.id, name=row.name,
             bbox=(row.min_lon, row.min_lat, row.max_lon, row.max_lat),
-            domain=row.domain, active=row.active,
-            created_at=row.created_at, revisit_hours=row.revisit_hours,
+            domain=row.domain, terrain_type=row.terrain_type,
+            active=row.active, created_at=row.created_at,
+            revisit_hours=row.revisit_hours,
         )
         try:
             result = await orch.scan(aoi)

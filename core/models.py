@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-SourceType = Literal["optical", "sar", "maritime", "events", "thermal", "flights"]
+SourceType = Literal["optical", "sar", "events", "thermal", "flights"]
 
 DetectionType = Literal[
     "force_buildup",
@@ -15,6 +15,7 @@ DetectionType = Literal[
     "vessel_anomaly",
     "event_spike",
     "hydrology_change",
+    "geological_activity",
     "unknown",
 ]
 
@@ -26,6 +27,7 @@ class AOI(BaseModel):
     name: str
     bbox: tuple[float, float, float, float]
     domain: Literal["land", "maritime", "mixed"]
+    terrain_type: Literal["standard", "volcanic", "glacial"] | None = None
     active: bool = True
     created_at: datetime
     revisit_hours: int = 24
