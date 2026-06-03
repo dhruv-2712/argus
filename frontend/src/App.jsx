@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { PenLine, X, AlertTriangle, CheckCircle2, History, Radio, List } from "lucide-react"
+import { PenLine, X, AlertTriangle, CheckCircle2, Radio, List } from "lucide-react"
 import Header from "./components/Header"
 import RightPanel from "./components/RightPanel"
 import CreateAOIModal from "./components/CreateAOIModal"
@@ -8,7 +8,6 @@ import TheaterPosture from "./components/TheaterPosture"
 import BootSequence from "./components/BootSequence"
 import ScanOverlay from "./components/ScanOverlay"
 import CommandPalette from "./components/CommandPalette"
-import TimelineScrubber from "./components/TimelineScrubber"
 import ErrorBoundary from "./components/ErrorBoundary"
 import MapLoader from "./components/MapLoader"
 import ScanSummary from "./components/ScanSummary"
@@ -70,7 +69,6 @@ function ArgusApp() {
   const [pendingBbox, setPendingBbox] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [scanError, setScanError] = useState(null)
-  const [showTimeline, setShowTimeline] = useState(false)
   const isMobile = useIsMobile()
   const [panelOpen, setPanelOpen] = useState(false)
   const [scanSummary, setScanSummary] = useState(null)
@@ -184,27 +182,6 @@ function ArgusApp() {
             {drawMode ? "Cancel Plot" : "Plot AO"}
           </button>
 
-          {/* Timeline toggle (desktop only) */}
-          {selectedAOI && !isMobile && (
-            <button
-              onClick={() => setShowTimeline((t) => !t)}
-              className="mono"
-              style={{
-                position: "absolute", top: 52, left: 128, zIndex: 10,
-                background: showTimeline ? "var(--accent)" : "rgba(11,18,26,0.92)",
-                border: `1px solid ${showTimeline ? "var(--accent)" : "var(--line)"}`,
-                borderRadius: 0, padding: "7px 11px",
-                color: showTimeline ? "#04141a" : "var(--text)", cursor: "pointer",
-                fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase",
-                display: "flex", alignItems: "center", gap: 6,
-                boxShadow: showTimeline ? "0 0 14px var(--accent-glow)" : "0 2px 8px rgba(0,0,0,0.5)",
-                backdropFilter: "blur(4px)",
-              }}
-            >
-              <History size={13} /> Timeline
-            </button>
-          )}
-
           {/* Live feed status pill (desktop) */}
           {!isMobile && (
             <div
@@ -263,15 +240,6 @@ function ArgusApp() {
             >
               <List size={14} /> INTEL
             </button>
-          )}
-
-          {showTimeline && selectedAOI && (
-            <TimelineScrubber
-              aoiId={selectedAOI.id}
-              aoiName={selectedAOI.name}
-              onClose={() => setShowTimeline(false)}
-              onSeekContact={(t) => setSelectedContact({ ...t, id: t.track_id, simulation_run: false, threat_level: t.latest_threat })}
-            />
           )}
         </div>
 

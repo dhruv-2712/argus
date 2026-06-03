@@ -103,7 +103,6 @@ argus/
 │       │   ├── RightPanel.jsx  # Contacts / Areas / Status tabs
 │       │   ├── ContactDetail.jsx
 │       │   ├── BootSequence.jsx
-│       │   ├── TimelineScrubber.jsx
 │       │   ├── CommandPalette.jsx
 │       │   └── TheaterPosture.jsx
 │       ├── hooks/
@@ -329,7 +328,6 @@ build on every push to `main`.
 - **Live feed (WebSocket)** — contacts stream in the instant a scan resolves; audio cue on CRITICAL
 - **Autonomous scanning** — hourly scheduler re-scans active AOIs on their revisit cadence; results arrive as `AUTO` live-feed events
 - **Command palette** — `⌘K` / `Ctrl-K` to jump to any AOI, run a scan, or toggle audio
-- **Time machine** — scrub/replay how each AOI's tracks evolved across scans
 - **Confidence explainability** — every contact shows the exact fusion math ("why this score")
 - **SPECTER overlay** — engagement ring + avenues of approach drawn around simulated contacts
 - **Low-zoom clustering** — theaters collapse into count badges when zoomed out

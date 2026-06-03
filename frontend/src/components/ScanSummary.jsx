@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { X, FileText, Radio } from "lucide-react"
+import { X, FileText } from "lucide-react"
 import { SOURCE_CODE, THREAT_COLORS } from "../constants"
 
 // Plain-language briefing shown after a scan completes. Reads the `summary`
@@ -86,16 +86,6 @@ export default function ScanSummary({ summary, aoiName, onClose }) {
           </div>
         </div>
 
-        {/* Replay hint */}
-        {fused_count > 0 && (
-          <div className="flex items-center" style={{ gap: 8, marginTop: 14, padding: "9px 11px", background: "rgba(54,220,235,0.06)", border: "1px solid var(--line)", borderLeft: "3px solid var(--accent)" }}>
-            <Radio size={13} style={{ color: "var(--accent)", flexShrink: 0 }} />
-            <span style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
-              Scan this area again later to build track history — a second scan enables
-              the <b style={{ color: "var(--text)" }}>Timeline replay</b> and boosts confidence on anything that persists.
-            </span>
-          </div>
-        )}
       </div>
     </div>
   )

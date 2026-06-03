@@ -165,8 +165,7 @@ def _compose_narrative(
     # 5. Next step.
     if fused:
         parts.append(
-            "Scan again later to track how these contacts evolve — a second scan "
-            "unlocks the Timeline replay and raises confidence on anything that persists."
+            "Re-scanning later raises confidence on anything that persists across passes."
         )
 
     return " ".join(parts)

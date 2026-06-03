@@ -49,15 +49,6 @@ export function useRegional() {
   return useQuery({ queryKey: ["regional"], queryFn: api.getRegional, refetchInterval: 30000 })
 }
 
-export function useTracks(aoiId) {
-  return useQuery({
-    queryKey: ["tracks", aoiId],
-    queryFn: () => api.getTracks(aoiId),
-    enabled: !!aoiId,
-    refetchInterval: 30000,
-  })
-}
-
 export function useContactDetail(contactId) {
   return useQuery({
     queryKey: ["contact", contactId],
