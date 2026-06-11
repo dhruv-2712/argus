@@ -48,7 +48,11 @@ export function useSimulate() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ aoiId, contactId }) => api.simulate(aoiId, contactId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts"] }),
+    onSuccess: (_data, { contactId }) => {
+      qc.invalidateQueries({ queryKey: ["contacts"] })
+      // Refetch the dossier so the persisted SPECTER analysis appears.
+      qc.invalidateQueries({ queryKey: ["contact", contactId] })
+    },
   })
 }
 

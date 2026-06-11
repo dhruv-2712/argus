@@ -5,7 +5,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.fusion.engine import explain_confidence
 from db.database import ContactRow, FusedContactRow, async_session
@@ -77,6 +76,13 @@ async def list_contacts(
         stmt = stmt.where(FusedContactRow.timestamp >= after)
     if before:
         stmt = stmt.where(FusedContactRow.timestamp <= before)
+    # sources / detection_types are stored as JSON arrays of strings, so a
+    # quoted LIKE matches whole elements. Filtering in SQL (not post-limit)
+    # keeps the result set complete.
+    if source:
+        stmt = stmt.where(FusedContactRow.sources.like(f'%"{source}"%'))
+    if detection_type:
+        stmt = stmt.where(FusedContactRow.detection_types.like(f'%"{detection_type}"%'))
 
     stmt = stmt.limit(limit)
 
@@ -84,14 +90,7 @@ async def list_contacts(
         result = await session.execute(stmt)
         rows = result.scalars().all()
 
-    contacts = [_fused_row_to_dict(r) for r in rows]
-
-    if source:
-        contacts = [c for c in contacts if source in c["sources"]]
-    if detection_type:
-        contacts = [c for c in contacts if detection_type in c["detection_types"]]
-
-    return contacts
+    return [_fused_row_to_dict(r) for r in rows]
 
 
 @router.get("/{contact_id}")
@@ -113,7 +112,12 @@ async def get_contact(contact_id: str) -> dict:
 
     raw_dicts = [_contact_row_to_dict(r) for r in raw_rows]
     fused["raw_contacts"] = raw_dicts
-    fused["confidence_breakdown"] = explain_confidence(raw_dicts)
+    fused["confidence_breakdown"] = explain_confidence(
+        raw_dicts,
+        persistence_score=row.persistence_score or 0.0,
+        observation_count=row.observation_count or 1,
+    )
+    fused["specter"] = json.loads(row.specter_json) if row.specter_json else None
     return fused
 
 

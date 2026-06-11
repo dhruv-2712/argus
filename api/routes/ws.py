@@ -79,28 +79,39 @@ async def _redis_publish(event: dict) -> None:
 async def start_redis_subscriber() -> None:
     """Background task: forward events from OTHER workers to local clients.
 
-    Call once at startup when REDIS_URL is configured.
+    Call once at startup when REDIS_URL is configured. Reconnects with
+    exponential backoff so a dropped Redis connection doesn't silently kill
+    cross-worker fan-out for the life of the process.
     """
     if not _HAS_REDIS:
         return
-    try:
-        async with aioredis.from_url(_REDIS_URL) as r:
-            async with r.pubsub() as pubsub:
-                await pubsub.subscribe(_REDIS_CHANNEL)
-                logger.info("Redis subscriber active on channel %s", _REDIS_CHANNEL)
-                async for msg in pubsub.listen():
-                    if msg["type"] != "message":
-                        continue
-                    try:
-                        event = json.loads(msg["data"])
-                        # Skip events we published ourselves (already broadcast locally)
-                        if event.pop("_wid", None) == _WORKER_ID:
+    backoff = 1.0
+    while True:
+        try:
+            async with aioredis.from_url(_REDIS_URL) as r:
+                async with r.pubsub() as pubsub:
+                    await pubsub.subscribe(_REDIS_CHANNEL)
+                    logger.info("Redis subscriber active on channel %s", _REDIS_CHANNEL)
+                    backoff = 1.0
+                    async for msg in pubsub.listen():
+                        if msg["type"] != "message":
                             continue
-                        await manager.broadcast(event)
-                    except Exception:
-                        pass
-    except Exception as exc:
-        logger.warning("Redis subscriber error: %s", exc)
+                        try:
+                            event = json.loads(msg["data"])
+                            # Skip events we published ourselves (already broadcast locally)
+                            if event.pop("_wid", None) == _WORKER_ID:
+                                continue
+                            await manager.broadcast(event)
+                        except Exception:
+                            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Redis subscriber error: %s — reconnecting in %.0fs", exc, backoff
+            )
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 60.0)
 
 
 async def broadcast(event: dict) -> None:

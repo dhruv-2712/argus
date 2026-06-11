@@ -11,9 +11,10 @@ import logging
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 
+from api.ratelimit import rate_limit
 from db.database import AOIRow, FusedContactRow, async_session
 
 router = APIRouter(prefix="/intel", tags=["intel"])
@@ -21,9 +22,11 @@ router = APIRouter(prefix="/intel", tags=["intel"])
 logger = logging.getLogger(__name__)
 
 # In-memory TTL cache for terrain geometry (the elevation API is slow and
-# the same contact is inspected repeatedly).
+# the same contact is inspected repeatedly). Bounded so a client iterating
+# coordinates can't grow it without limit.
 _TERRAIN_CACHE: dict[str, tuple[float, dict]] = {}
 _TERRAIN_TTL = 3600.0
+_TERRAIN_CACHE_MAX = 500
 
 _THREAT_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -156,7 +159,7 @@ async def aoi_tracks(aoi_id: str) -> dict:
     return {"aoi_id": aoi_id, "track_count": len(ordered), "tracks": ordered}
 
 
-@router.get("/terrain")
+@router.get("/terrain", dependencies=[Depends(rate_limit("terrain", 2.0))])
 async def terrain_geometry(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
@@ -189,4 +192,11 @@ async def terrain_geometry(
     }
     if geometry:
         _TERRAIN_CACHE[key] = (now, payload)
+        if len(_TERRAIN_CACHE) > _TERRAIN_CACHE_MAX:
+            for k, (ts, _) in list(_TERRAIN_CACHE.items()):
+                if now - ts >= _TERRAIN_TTL:
+                    _TERRAIN_CACHE.pop(k, None)
+            while len(_TERRAIN_CACHE) > _TERRAIN_CACHE_MAX:
+                oldest = min(_TERRAIN_CACHE, key=lambda k: _TERRAIN_CACHE[k][0])
+                _TERRAIN_CACHE.pop(oldest)
     return payload

@@ -5,13 +5,12 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from core.fusion.engine import FusionEngine
 from core.fusion.temporal import TemporalCorrelator
 from core.models import AOI, Contact, FusedContact
-from db.database import ContactRow, FusedContactRow, AOIRow, async_session
+from db.database import ContactRow, FusedContactRow, async_session
 from layers.events import EventsLayer
 from layers.flights import FlightsLayer
 from layers.optical import OpticalLayer
@@ -88,7 +87,7 @@ class ScanOrchestrator:
             if item:
                 specter_results[item[0]] = item[1]
 
-        await self._persist(aoi, all_contacts, fused)
+        await self._persist(aoi, all_contacts, fused, specter_results)
 
         return {
             "fused_contacts": fused,
@@ -127,8 +126,10 @@ class ScanOrchestrator:
         aoi: AOI,
         contacts: list[Contact],
         fused: list[FusedContact],
+        specter_results: dict[str, dict] | None = None,
     ) -> None:
-        """Write raw and fused contacts to DB, update AOI last_scan."""
+        """Write raw and fused contacts (with any SPECTER analysis) to DB."""
+        specter_results = specter_results or {}
         async with async_session() as session:
             for c in contacts:
                 session.add(ContactRow(
@@ -150,17 +151,16 @@ class ScanOrchestrator:
                     lat=fc.lat, lon=fc.lon, timestamp=fc.timestamp,
                     threat_level=fc.threat_level, summary=fc.summary,
                     simulation_run=fc.simulation_run,
+                    specter_json=(
+                        json.dumps(specter_results[fc.id], default=str)
+                        if fc.id in specter_results else None
+                    ),
                     track_id=fc.track_id, first_seen=fc.first_seen,
                     last_seen=fc.last_seen, observation_count=fc.observation_count,
                     lifecycle=fc.lifecycle, confidence_delta=fc.confidence_delta,
                     persistence_score=fc.persistence_score,
                 ))
 
-            await session.execute(
-                update(AOIRow)
-                .where(AOIRow.id == aoi.id)
-                .values(active=True)
-            )
             await session.commit()
 
         logger.info(

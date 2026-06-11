@@ -152,10 +152,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.info("ARGUS API started — autonomous scan scheduler ACTIVE (1h interval)")
     else:
         logger.info("ARGUS API started — autonomous scan DISABLED (set ENABLE_AUTOSCAN=true to enable)")
-    # Start Redis subscriber for multi-worker WebSocket fan-out (no-op if REDIS_URL unset)
+    # Start Redis subscriber for multi-worker WebSocket fan-out (no-op if
+    # REDIS_URL unset). Keep a reference so the task can't be GC'd mid-flight.
     from api.routes.ws import start_redis_subscriber
-    asyncio.create_task(start_redis_subscriber())
+    redis_task = asyncio.create_task(start_redis_subscriber())
     yield
+    redis_task.cancel()
     if _ENABLE_AUTOSCAN and _scheduler.running:
         _scheduler.shutdown(wait=False)
     logger.info("ARGUS API shutting down")

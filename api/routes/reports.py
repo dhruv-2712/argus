@@ -1,16 +1,17 @@
 """Intelligence report generation endpoints."""
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.ratelimit import rate_limit
 from core.models import AOI, FusedContact, IntelReport
 from db.database import FusedContactRow, IntelReportRow, AOIRow, async_session
 from reports.generator import ReportGenerator
@@ -100,7 +101,7 @@ def _fused_row_to_dict(row: FusedContactRow) -> dict:
     }
 
 
-@router.post("/aoi/{aoi_id}/report")
+@router.post("/aoi/{aoi_id}/report", dependencies=[Depends(rate_limit("report", 15.0))])
 async def generate_report(aoi_id: str, body: ReportRequest | None = None) -> dict:
     """Generate an intelligence report for an AOI."""
     if body is None:
@@ -173,9 +174,17 @@ async def generate_report(aoi_id: str, body: ReportRequest | None = None) -> dic
         pdf_path=None,
     )
 
-    # Generate PDF
+    # Stored SPECTER analyses enrich the PDF's per-contact pages.
+    specter_map = {
+        r.id: json.loads(r.specter_json) for r in all_rows if r.specter_json
+    }
+
+    # PDF generation is synchronous (reportlab) — run off the event loop.
     generator = ReportGenerator()
-    pdf_path = generator.generate(intel_report, aoi_model, fc_models)
+    pdf_path = await asyncio.to_thread(
+        generator.generate, intel_report, aoi_model, fc_models,
+        specter_results=specter_map,
+    )
     report["pdf_path"] = pdf_path
 
     async with async_session() as session:

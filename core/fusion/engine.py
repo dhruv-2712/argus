@@ -2,7 +2,6 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
 
 from geopy.distance import geodesic
 
@@ -23,6 +22,10 @@ SOURCE_RELIABILITY: dict[str, float] = {
     "flights": 0.80,   # ADS-B self-reported, spoofable but high coverage
     "events": 0.70,    # news/sentiment, coarse geolocation, higher noise
 }
+
+# Maximum confidence bonus the TemporalCorrelator may award for repeated
+# independent confirmation. Lives here so explain_confidence can mirror it.
+MAX_PERSISTENCE_BONUS = 0.10
 
 
 def assign_threat_level(confidence: float) -> str:
@@ -45,13 +48,18 @@ def corroboration_multiplier(n_sources: int) -> float:
     return 1.6
 
 
-def explain_confidence(raw_contacts: list[dict]) -> dict:
+def explain_confidence(
+    raw_contacts: list[dict],
+    persistence_score: float = 0.0,
+    observation_count: int = 1,
+) -> dict:
     """Reconstruct the fusion confidence math as a human-readable breakdown.
 
-    Each raw contact dict must carry ``source`` and ``confidence``. Returns the
-    weighted base confidence, the per-source contributions, the corroboration
-    multiplier applied, and the resulting score — so the UI can show operators
-    exactly *why* a contact scored the way it did.
+    Each raw contact dict must carry ``source`` and ``confidence``. Mirrors
+    ``FusionEngine._score_cluster`` exactly — including the Dempster-Shafer
+    blend for multi-source clusters — plus the TemporalCorrelator persistence
+    bonus, so the UI shows operators the same math that produced the stored
+    score.
     """
     if not raw_contacts:
         return {"steps": [], "final": 0.0}
@@ -75,8 +83,23 @@ def explain_confidence(raw_contacts: list[dict]) -> dict:
     base = weighted / total_w if total_w else 0.0
     distinct = len({c.get("source") for c in raw_contacts})
     mult = corroboration_multiplier(distinct)
-    final = min(base * mult, 0.97) if distinct >= 2 else base * mult
 
+    ds_confidence: float | None = None
+    if distinct >= 2:
+        from core.fusion.dempster_shafer import fuse_ds
+        ds = fuse_ds(raw_contacts, SOURCE_RELIABILITY)
+        ds_confidence = ds["ds_confidence"]
+        corr_score = min(base * mult, 0.97)
+        final = min(round(0.4 * ds_confidence + 0.6 * corr_score, 4), 0.97)
+    else:
+        final = base * mult
+
+    persistence_bonus = 0.0
+    if observation_count > 1 and persistence_score > 0:
+        persistence_bonus = round(persistence_score * MAX_PERSISTENCE_BONUS, 4)
+        final = min(0.97, final + persistence_bonus)
+
+    final = round(final, 4)
     return {
         "contributions": contributions,
         "weighted_base": round(base, 4),
@@ -86,8 +109,11 @@ def explain_confidence(raw_contacts: list[dict]) -> dict:
             "uncorroborated (single source)" if distinct <= 1
             else f"{distinct}-source corroboration"
         ),
-        "capped": distinct >= 2 and base * mult > 0.97,
-        "final": round(final, 4),
+        "ds_confidence": ds_confidence,
+        "persistence_bonus": persistence_bonus,
+        "observation_count": observation_count,
+        "capped": final >= 0.97,
+        "final": final,
         "threat_level": assign_threat_level(final),
     }
 
@@ -147,7 +173,13 @@ class FusionEngine:
         return fused
 
     def _cluster_contacts(self, contacts: list[Contact]) -> list[list[Contact]]:
-        """Group contacts within cluster_radius of each other (greedy single-linkage)."""
+        """Group contacts within cluster_radius of a cluster anchor.
+
+        Greedy anchor-based pass (not full single-linkage): each unassigned
+        contact becomes an anchor and absorbs everything within radius of
+        *it* — chains of contacts each within radius of a member but not of
+        the anchor land in separate clusters.
+        """
         assigned = [False] * len(contacts)
         clusters: list[list[Contact]] = []
 

@@ -14,7 +14,7 @@ from datetime import datetime
 
 from geopy.distance import geodesic
 
-from core.fusion.engine import assign_threat_level
+from core.fusion.engine import MAX_PERSISTENCE_BONUS, assign_threat_level
 from core.models import FusedContact
 
 logger = logging.getLogger(__name__)
@@ -25,9 +25,6 @@ _TRACK_RADIUS_KM = 11.0  # ~0.1 deg, matches the fusion cluster radius
 # Confidence change thresholds for lifecycle classification.
 _ESCALATE_DELTA = 0.05
 _DEESCALATE_DELTA = -0.05
-
-# Maximum confidence bonus awarded for repeated independent confirmation.
-_MAX_PERSISTENCE_BONUS = 0.10
 
 
 class TemporalCorrelator:
@@ -80,7 +77,7 @@ class TemporalCorrelator:
             # passes is more credible than a single sighting. Boost, then
             # re-derive threat level from the calibrated score.
             if fc.observation_count > 1:
-                bonus = fc.persistence_score * _MAX_PERSISTENCE_BONUS
+                bonus = fc.persistence_score * MAX_PERSISTENCE_BONUS
                 fc.confidence = round(min(0.97, fc.confidence + bonus), 4)
                 fc.threat_level = assign_threat_level(fc.confidence)
 
@@ -129,12 +126,21 @@ def find_resolved_tracks(
 
     These represent activity that has ceased — useful for the regional board.
     """
+    def _newer(a: dict, b: dict) -> bool:
+        """True if a's timestamp is later; records without one sort oldest."""
+        ta, tb = a.get("timestamp"), b.get("timestamp")
+        if ta is None:
+            return False
+        if tb is None:
+            return True
+        return ta > tb
+
     active_ids = {c.track_id for c in new_contacts if c.track_id}
     latest_by_track: dict[str, dict] = {}
     for h in history:
         tid = h.get("track_id")
         if tid:
             prev = latest_by_track.get(tid)
-            if not prev or (h.get("timestamp") or 0) > (prev.get("timestamp") or 0):
+            if not prev or _newer(h, prev):
                 latest_by_track[tid] = h
     return [h for tid, h in latest_by_track.items() if tid not in active_ids]

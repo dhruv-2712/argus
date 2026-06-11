@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 SourceType = Literal["optical", "sar", "events", "thermal", "flights"]
@@ -40,7 +40,7 @@ class Contact(BaseModel):
     aoi_id: str
     timestamp: datetime
     source: SourceType
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     corroborated_by: list[SourceType] = []
     detection_type: DetectionType
     lat: float
@@ -64,7 +64,7 @@ class FusedContact(BaseModel):
     aoi_id: str
     constituent_contacts: list[str]
     sources: list[SourceType]
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     detection_types: list[DetectionType]
     lat: float
     lon: float

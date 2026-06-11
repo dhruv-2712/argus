@@ -99,6 +99,8 @@ function ConfidenceBreakdown({ contactId, color }) {
         <div style={{ borderTop: "1px solid var(--line)", margin: "8px 0", paddingTop: 8 }}>
           <Row label="Weighted base" value={`${Math.round(b.weighted_base * 100)}%`} />
           <Row label={b.corroboration_label} value={`× ${b.corroboration_multiplier}`} accent />
+          {b.ds_confidence != null && <Row label="D-S evidence belief (40% blend)" value={`${Math.round(b.ds_confidence * 100)}%`} />}
+          {b.persistence_bonus > 0 && <Row label={`Persistence ×${b.observation_count} sightings`} value={`+${Math.round(b.persistence_bonus * 100)}%`} accent />}
           {b.capped && <Row label="Capped at ceiling" value="0.97" warn />}
           <div className="mono flex items-center justify-between" style={{ fontSize: 12.5, marginTop: 7, fontWeight: 700 }}>
             <span style={{ color: "var(--text-bright)", letterSpacing: "0.06em" }}>FUSED CONFIDENCE</span>
@@ -192,6 +194,10 @@ function HistCell({ label, value, color }) {
 
 export default function ContactDetail({ contact, specter, onBack }) {
   const simulate = useSimulate()
+  // SPECTER analysis is persisted server-side (auto-scan or manual run) and
+  // exposed on the contact-detail endpoint; the prop is a same-session fallback.
+  const { data: detail } = useContactDetail(contact.id)
+  const specterData = specter || simulate.data || detail?.specter
   const color = THREAT_COLORS[contact.threat_level] || "#6c8090"
   const conf = Math.round((contact.confidence || 0) * 100)
 
@@ -273,21 +279,21 @@ export default function ContactDetail({ contact, specter, onBack }) {
         <TrackHistory contact={contact} />
 
         {/* SPECTER */}
-        {contact.simulation_run && specter ? (
+        {specterData ? (
           <div className="brkt" style={{ background: "var(--panel)", border: "1px solid var(--line)", padding: "11px 12px", marginBottom: 12 }}>
             <div className="mono flex items-center" style={{ gap: 7, fontSize: 11.5, fontWeight: 700, color: "var(--accent)", marginBottom: 9, letterSpacing: "0.1em" }}>
               <Zap size={13} /> SPECTER // TERRAIN ASSESSMENT
             </div>
-            {specter.ocoka_analysis && Object.entries(specter.ocoka_analysis).filter(([k]) => k !== "tactical_significance").map(([k, v]) => (
+            {specterData.ocoka_analysis && Object.entries(specterData.ocoka_analysis).filter(([k]) => k !== "tactical_significance").map(([k, v]) => (
               <OcokaSection key={k} label={k} value={v} />
             ))}
-            {specter.threat_assessment && (
+            {specterData.threat_assessment && (
               <div style={{ marginTop: 11, background: "var(--panel-2)", border: "1px solid var(--line)", borderLeft: "3px solid var(--amber)", padding: "9px 11px" }}>
                 <div className="label" style={{ color: "var(--amber)", marginBottom: 6 }}>Threat Assessment</div>
                 <div className="mono" style={{ fontSize: 11.5, color: "var(--text-bright)", marginBottom: 5, lineHeight: 1.5 }}>
-                  <span style={{ color: "var(--muted)" }}>INTENT:</span> {specter.threat_assessment.probable_intent}
+                  <span style={{ color: "var(--muted)" }}>INTENT:</span> {specterData.threat_assessment.probable_intent}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.55 }}>{specter.threat_assessment.projected_activity}</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.55 }}>{specterData.threat_assessment.projected_activity}</div>
               </div>
             )}
           </div>

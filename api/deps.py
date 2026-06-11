@@ -1,10 +1,7 @@
 """Shared FastAPI dependencies."""
 
-from db.database import async_session, get_db
 from api.scanner import ScanOrchestrator
 from core.simulation.ocoka import Specter
-
-db_dependency = get_db
 
 _orchestrator: ScanOrchestrator | None = None
 _specter: Specter | None = None

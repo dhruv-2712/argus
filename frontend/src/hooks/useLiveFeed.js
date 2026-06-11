@@ -17,9 +17,18 @@ export function useLiveFeed() {
   const [lastEvent, setLastEvent] = useState(null)
   const wsRef = useRef(null)
   const retryRef = useRef(null)
+  const retryDelayRef = useRef(4000)
 
   useEffect(() => {
     let closed = false
+
+    // Exponential backoff (4s → 60s cap) so a dead backend isn't hammered
+    // every 4s by every open tab; resets once a connection succeeds.
+    const scheduleRetry = () => {
+      if (closed) return
+      retryRef.current = setTimeout(connect, retryDelayRef.current)
+      retryDelayRef.current = Math.min(retryDelayRef.current * 2, 60000)
+    }
 
     const connect = () => {
       if (closed) return
@@ -27,15 +36,18 @@ export function useLiveFeed() {
       try {
         ws = new WebSocket(wsUrl())
       } catch {
-        retryRef.current = setTimeout(connect, 4000)
+        scheduleRetry()
         return
       }
       wsRef.current = ws
 
-      ws.onopen = () => setConnected(true)
+      ws.onopen = () => {
+        setConnected(true)
+        retryDelayRef.current = 4000
+      }
       ws.onclose = () => {
         setConnected(false)
-        if (!closed) retryRef.current = setTimeout(connect, 4000)
+        scheduleRetry()
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (msg) => {

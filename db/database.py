@@ -56,7 +56,7 @@ class ContactRow(Base):
     __tablename__ = "contacts"
 
     id = Column(String, primary_key=True)
-    aoi_id = Column(String, nullable=False)
+    aoi_id = Column(String, nullable=False, index=True)
     timestamp = Column(DateTime, nullable=False)
     source = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -75,20 +75,22 @@ class FusedContactRow(Base):
     __tablename__ = "fused_contacts"
 
     id = Column(String, primary_key=True)
-    aoi_id = Column(String, nullable=False)
+    aoi_id = Column(String, nullable=False, index=True)
     constituent_contacts = Column(Text, nullable=False)
     sources = Column(Text, nullable=False)
     confidence = Column(Float, nullable=False)
     detection_types = Column(Text, nullable=False)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
-    timestamp = Column(DateTime, nullable=False)
+    timestamp = Column(DateTime, nullable=False, index=True)
     threat_level = Column(String, nullable=False)
     summary = Column(Text, nullable=False)
     simulation_run = Column(Boolean, default=False)
+    # SPECTER OCOKA analysis (JSON), persisted so LLM work is never re-run.
+    specter_json = Column(Text, nullable=True)
 
     # Temporal intelligence
-    track_id = Column(String, nullable=True)
+    track_id = Column(String, nullable=True, index=True)
     first_seen = Column(DateTime, nullable=True)
     last_seen = Column(DateTime, nullable=True)
     observation_count = Column(Integer, default=1)
@@ -103,7 +105,7 @@ class IntelReportRow(Base):
     __tablename__ = "intel_reports"
 
     id = Column(String, primary_key=True)
-    aoi_id = Column(String, nullable=False)
+    aoi_id = Column(String, nullable=False, index=True)
     generated_at = Column(DateTime, nullable=False)
     fused_contacts = Column(Text, nullable=False)
     threat_assessment = Column(Text, nullable=False)
@@ -126,12 +128,24 @@ _MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("lifecycle", "VARCHAR DEFAULT 'new'"),
         ("confidence_delta", "FLOAT DEFAULT 0.0"),
         ("persistence_score", "FLOAT DEFAULT 0.0"),
+        ("specter_json", "TEXT"),
     ],
 }
 
+# Hot-path indexes — created on existing DBs too (create_all skips existing
+# tables). Names match SQLAlchemy's index=True convention so the two paths
+# never collide.
+_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_contacts_aoi_id ON contacts (aoi_id)",
+    "CREATE INDEX IF NOT EXISTS ix_fused_contacts_aoi_id ON fused_contacts (aoi_id)",
+    "CREATE INDEX IF NOT EXISTS ix_fused_contacts_timestamp ON fused_contacts (timestamp)",
+    "CREATE INDEX IF NOT EXISTS ix_fused_contacts_track_id ON fused_contacts (track_id)",
+    "CREATE INDEX IF NOT EXISTS ix_intel_reports_aoi_id ON intel_reports (aoi_id)",
+]
+
 
 def _apply_migrations(conn) -> None:
-    """Idempotently add any missing columns to existing tables (SQLite)."""
+    """Idempotently add any missing columns/indexes to existing tables (SQLite)."""
     for table, columns in _MIGRATIONS.items():
         existing = {
             row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")
@@ -140,6 +154,8 @@ def _apply_migrations(conn) -> None:
             if name not in existing:
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
                 logger.info("Migration: added %s.%s", table, name)
+    for ddl in _INDEXES:
+        conn.exec_driver_sql(ddl)
 
 
 async def init_db() -> None:

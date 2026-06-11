@@ -3,12 +3,10 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_orchestrator, get_specter
 from api.ratelimit import SCAN_SEMAPHORE, rate_limit
@@ -108,17 +106,30 @@ async def scan_aoi(
         "raw_contact_count": result["raw_contact_count"],
         "layer_errors": result["layer_errors"],
         "layers_run": result["layers_run"],
+        "specter_results": result["specter_results"],
         "summary": summary,
     }
 
 
+def _require_owner(row: AOIRow, x_device_id: str | None) -> None:
+    """Enforce the same ownership rules as PATCH /aoi/{id}."""
+    if row.device_id is None:
+        raise HTTPException(status_code=403, detail="System AOIs are read-only")
+    if row.device_id != x_device_id:
+        raise HTTPException(status_code=403, detail="Not your AOI")
+
+
 @router.post("/{aoi_id}/monitor/start")
-async def start_monitoring(aoi_id: str) -> dict:
-    """Set AOI active=True to enable monitoring."""
+async def start_monitoring(
+    aoi_id: str,
+    x_device_id: str | None = Header(default=None),
+) -> dict:
+    """Set AOI active=True to enable monitoring — owner only."""
     async with async_session() as session:
         row = await session.get(AOIRow, aoi_id)
         if not row:
             raise HTTPException(status_code=404, detail="AOI not found")
+        _require_owner(row, x_device_id)
         row.active = True
         await session.commit()
         await session.refresh(row)
@@ -130,12 +141,16 @@ async def start_monitoring(aoi_id: str) -> dict:
 
 
 @router.post("/{aoi_id}/monitor/stop")
-async def stop_monitoring(aoi_id: str) -> dict:
-    """Set AOI active=False to stop monitoring."""
+async def stop_monitoring(
+    aoi_id: str,
+    x_device_id: str | None = Header(default=None),
+) -> dict:
+    """Set AOI active=False to stop monitoring — owner only."""
     async with async_session() as session:
         row = await session.get(AOIRow, aoi_id)
         if not row:
             raise HTTPException(status_code=404, detail="AOI not found")
+        _require_owner(row, x_device_id)
         row.active = False
         await session.commit()
         await session.refresh(row)
@@ -189,13 +204,17 @@ class SimulateRequest(BaseModel):
     contact_id: str
 
 
-@router.post("/{aoi_id}/simulate")
+@router.post("/{aoi_id}/simulate", dependencies=[Depends(rate_limit("simulate", 10.0))])
 async def simulate_contact(
     aoi_id: str,
     body: SimulateRequest,
     specter: Specter = Depends(get_specter),
 ) -> dict:
-    """Run SPECTER terrain analysis on a specific FusedContact."""
+    """Run SPECTER terrain analysis on a specific FusedContact.
+
+    Results are persisted; a contact that already has a stored analysis
+    returns it instantly instead of re-running the LLM pipeline.
+    """
     row = await _get_aoi_row(aoi_id)
     aoi = _row_to_aoi(row)
 
@@ -203,6 +222,17 @@ async def simulate_contact(
         fc_row = await session.get(FusedContactRow, body.contact_id)
     if not fc_row:
         raise HTTPException(status_code=404, detail="Contact not found")
+
+    if fc_row.specter_json:
+        cached = json.loads(fc_row.specter_json)
+        return {
+            "contact_id": fc_row.id,
+            "aoi_id": aoi_id,
+            "cached": True,
+            **{k: cached.get(k) for k in (
+                "terrain_data", "ocoka_analysis", "threat_assessment", "final_report"
+            )},
+        }
 
     fc = FusedContact(
         id=fc_row.id,
@@ -226,16 +256,18 @@ async def simulate_contact(
             detail=f"Contact confidence {fc.confidence:.2f} below SPECTER threshold",
         )
 
-    # Mark as simulated in DB
+    # Persist the analysis so it is never re-run for this contact.
     async with async_session() as session:
         fc_row_update = await session.get(FusedContactRow, body.contact_id)
         if fc_row_update:
             fc_row_update.simulation_run = True
+            fc_row_update.specter_json = json.dumps(result, default=str)
             await session.commit()
 
     return {
         "contact_id": fc.id,
         "aoi_id": aoi_id,
+        "cached": False,
         "terrain_data": result["terrain_data"],
         "ocoka_analysis": result["ocoka_analysis"],
         "threat_assessment": result["threat_assessment"],

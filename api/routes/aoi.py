@@ -1,14 +1,23 @@
 """AOI CRUD endpoints."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy import delete, or_, select
 
-from core.models import AOI
-from db.database import AOIRow, ContactRow, FusedContactRow, async_session
+from db.database import (
+    AOIRow,
+    ContactRow,
+    FusedContactRow,
+    IntelReportRow,
+    async_session,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/aoi", tags=["aoi"])
 
@@ -167,9 +176,22 @@ async def delete_aoi(
             raise HTTPException(status_code=403, detail="System AOIs cannot be deleted")
         if row.device_id != x_device_id:
             raise HTTPException(status_code=403, detail="Not your AOI")
-        # Remove the AOI and any contacts/fused records it produced.
+        # Remove the AOI and everything it produced: contacts, fused records,
+        # intel reports, and their PDFs on disk.
+        report_rows = (
+            await session.execute(
+                select(IntelReportRow).where(IntelReportRow.aoi_id == aoi_id)
+            )
+        ).scalars().all()
+        for rep in report_rows:
+            if rep.pdf_path:
+                try:
+                    Path(rep.pdf_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Could not delete PDF %s: %s", rep.pdf_path, exc)
         await session.execute(delete(ContactRow).where(ContactRow.aoi_id == aoi_id))
         await session.execute(delete(FusedContactRow).where(FusedContactRow.aoi_id == aoi_id))
+        await session.execute(delete(IntelReportRow).where(IntelReportRow.aoi_id == aoi_id))
         await session.delete(row)
         await session.commit()
     return {"deleted": aoi_id}

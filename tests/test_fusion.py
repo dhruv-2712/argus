@@ -174,16 +174,33 @@ def test_reliability_weighting_leans_toward_trusted_source_in_mixed_cluster():
 # ── Explainability ──────────────────────────────────────────────
 
 def test_explain_confidence_reconstructs_score():
+    """The breakdown must reproduce the exact score the engine stored —
+    including the Dempster-Shafer blend for multi-source clusters."""
     raw = [
         {"source": "optical", "confidence": 0.6},
         {"source": "sar", "confidence": 0.6},
     ]
+    engine = FusionEngine()
+    fused = engine.fuse([
+        make_contact("optical", 0.6, "construction", lat=34.5, lon=80.4),
+        make_contact("sar", 0.6, "construction", lat=34.5, lon=80.4),
+    ])
     breakdown = explain_confidence(raw)
     assert breakdown["distinct_sources"] == 2
     assert breakdown["corroboration_multiplier"] == 1.3
-    assert breakdown["final"] == pytest.approx(0.78, abs=0.02)
-    assert breakdown["threat_level"] == "high"
+    assert breakdown["ds_confidence"] is not None
+    assert breakdown["final"] == pytest.approx(fused[0].confidence, abs=0.005)
+    assert breakdown["threat_level"] == fused[0].threat_level
     assert len(breakdown["contributions"]) == 2
+
+
+def test_explain_confidence_persistence_bonus():
+    """Repeated observation adds the same bonus the TemporalCorrelator applies."""
+    raw = [{"source": "sar", "confidence": 0.8}]
+    base = explain_confidence(raw)
+    boosted = explain_confidence(raw, persistence_score=0.5, observation_count=2)
+    assert boosted["persistence_bonus"] == pytest.approx(0.05)
+    assert boosted["final"] == pytest.approx(base["final"] + 0.05, abs=0.001)
 
 
 def test_explain_confidence_empty():
